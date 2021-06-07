@@ -1,0 +1,28 @@
+__pycache__
+# pycharm files
+.idea
+venv
+# qtcreator files
+*.user*
+*.autosave
+*.pyproject
+# Pyinstaller files
+build
+dist
+*.spec
+*.db
+*.zip
+
+# mac os
+.DS_Store
+
+# installer files
+*.exe
+*.app
+*.dmg
+installer/output/packages/org.OCR.RenderShare/data/*
+installer/output/Updater
+
+# update example files
+installer/update/Updater*
+installer/update/data/*
