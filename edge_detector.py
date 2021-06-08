@@ -30,11 +30,11 @@ class Line:
         cos = abs(np.cos(self.angle))
 
         if sine > 0.96:
-            self.horizontal = True
-            self.strength = sine * self.width
-        elif abs(np.cos(self.angle)) > 0.96:
             self.vertical = True
-            self.strength = cos * self.height
+            self.strength = sine * self.height
+        elif cos > 0.96:
+            self.horizontal = True
+            self.strength = cos * self.width
 
 
 class BoundaryExtraction:
@@ -45,12 +45,17 @@ class BoundaryExtraction:
         self.height = self.__original_image.shape[0]
         self.__image = None
         self.__all_lines = []
-        self.__horizontal_strong_lines = []
-        self.__vertical_strong_lines = []
+        self.__horizontal_lines = []
+        self.filtered_lines_by_y_center = []
+        self.__vertical_lines = []
 
-    def draw_lines(self, lines, shape, name='lines', wait_key=False):
+        self.__shelves = []
+
+    def draw_lines(self, lines, name='lines', shape=None, wait_key=False):
         if self.__debug:
             fld_lines = []
+            if not shape:
+                shape = self.__image.shape
             mask = np.zeros(shape)
 
             fld = cv.ximgproc.createFastLineDetector()
@@ -70,6 +75,8 @@ class BoundaryExtraction:
             3. apply gaussian filter
         """
         self.__image = cv.cvtColor(self.__original_image, cv.COLOR_BGR2GRAY)
+        # self.__image = cv.blur(self.__image, (3, 3))
+        # cv.imshow('fixed image', self.__image)
 
     def extract_lines(self):
         """
@@ -77,33 +84,80 @@ class BoundaryExtraction:
         the angle on horizontal access
         """
         fld = cv.ximgproc.createFastLineDetector()
-        lines = fld.detect(self.__image)
-        for lele in lines:
-            for x1, y1, x2, y2 in lele:
-                self.__all_lines.append(Line(x1, y1, x2, y2))
+        fld_output = fld.detect(self.__image)
+        for lines in fld_output:
+            for x1, y1, x2, y2 in lines:
+                line = Line(x1, y1, x2, y2)
+                self.__all_lines.append(line)
+                if line.horizontal and line.width >= 0.07 * self.width:
+                    self.__horizontal_lines.append(line)
+                elif line.vertical and line.height >= 0.07 * self.height:
+                    self.__vertical_lines.append(line)
 
-        self.draw_lines(self.__all_lines, self.__image.shape, 'All lines')
+        self.draw_lines(self.__all_lines, 'All lines')
+        self.draw_lines(self.__horizontal_lines, 'horizontal')
+        self.draw_lines(self.__vertical_lines, 'vertical')
 
-    def extract_shelves(self):
-        max_line = self.__all_lines[0]
-        last_y_center = max_line.y_center
-        filtered_lines_by_y_center = []
-        for i, line in enumerate(self.__all_lines):
-            if not line.horizontal:
+    def extract_shelves_coordinates(self):
+        for index in range(len(self.__horizontal_lines)):
+            i = 0
+            self.__horizontal_lines[index].strength += self.__horizontal_lines[index].strength
+            while index + i < len(self.__horizontal_lines) and self.__horizontal_lines[index + i].y_center - self.__horizontal_lines[index].y_center <= 15:
+                self.__horizontal_lines[index].strength += self.__horizontal_lines[index + i].strength
+                self.__horizontal_lines[index + i].strength += self.__horizontal_lines[index].strength
+                i += 1
+
+        self.filtered_lines_by_y_center = []
+        last_y_center = self.__horizontal_lines[0].y_center
+        max_line = self.__horizontal_lines[0]
+        for line in self.__horizontal_lines:
+            if line.strength < self.width * 1.5 or line.width < 0.07 * self.width:
                 continue
-            if not (line.horizontal and line.width >= (self.width * 0.25)):
-                continue
-            if (line.y_center - last_y_center) < 10:
+            elif line.y_center - last_y_center < 10:
                 if line.strength > max_line.strength:
                     max_line = line
+                # max_line = line if line.strength > max_line.strength else max_line
             else:
-                filtered_lines_by_y_center.append(max_line)
+                # x1, y1, x2, y2, avg_x, sine, strength = max_line
+                self.filtered_lines_by_y_center.append(max_line)
+                # cv2.line(mask2, (x1, y1), (x2, y2), (255, 0, 0), 1)
+                # cv2.line(self.image, (x1, y1), (x2, y2), (0, 255, 0), 1)
                 max_line = line
             last_y_center = line.y_center
-        filtered_lines_by_y_center.append(max_line)
 
-        self.draw_lines(filtered_lines_by_y_center, self.__image.shape, 'horizontal lines')
+        self.filtered_lines_by_y_center.append(max_line)
 
+        self.draw_lines(self.filtered_lines_by_y_center, 'horizontal lines')
+
+    def extract_shelves(self):
+        last_line = self.filtered_lines_by_y_center[0]
+        y_cuts = [0]
+        current_y_cut = 0
+        num_lines = 0
+        for line in self.filtered_lines_by_y_center:
+            if line.y_center - last_line.y_center < self.height / 30:
+                current_y_cut += line.y_center
+                num_lines += 1
+            else:
+                y_cuts.append(int(current_y_cut / max(num_lines, 1)))
+                num_lines = 1
+                current_y_cut = line.y_center
+            last_line = line
+        y_cuts.append(int(current_y_cut / max(num_lines, 1)))
+        y_cuts.append(self.height - 1)  # todo add this to filtered lines
+
+        print(f'y_cuts: {y_cuts}')
+        # for cut in y_cuts:
+        #     cv2.line(self.image, (cut, 0), (cut, self.image.shape[0] - 1), (0, 0, 255), 1)
+
+        for cut_index in range(1, len(y_cuts)):
+            shelf = self.__image[y_cuts[cut_index - 1]: y_cuts[cut_index], 0: self.width - 1]
+            # spine = imutils.rotate(spine, 90)
+            self.__shelves.append(shelf)
+
+            cv.imshow(f'shelf{cut_index}', shelf)
+
+        # cv.waitKey(0)
 
     def extract_spines(self):
         pass
@@ -111,6 +165,7 @@ class BoundaryExtraction:
     def extract_books(self):
         self.fix_image()
         self.extract_lines()
+        self.extract_shelves_coordinates()
         self.extract_shelves()
         if self.__debug:
             cv.waitKey(0)
