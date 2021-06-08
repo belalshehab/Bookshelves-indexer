@@ -1,57 +1,72 @@
 import cv2 as cv
 import numpy as np
 
+from enum import Enum
+
+
+#### constants ####
+ANGLE = 0.96
+LINE_PERC = 0.05
+NEIGHBOURS_LIMIT = 15
+
+class Orientation(Enum):
+    UNKNOWN = 0
+    VERTICAL = 1
+    HORIZONTAL = 2
+
 
 class Line:
     def __init__(self, *args):
         self.x1, self.y1, self.x2, self.y2 = args
 
-        self.x_center = (self.x1 + self.x2) / 2
-        self.y_center = (self.y1 + self.y2) / 2
-        self.height = self.y2 - self.y1
-        self.width = self.x2 - self.x1
+        self.angle = 0
+        self.length = 0
+        self.orientation = Orientation.UNKNOWN
+        self.center = 0
+        self.strength = 0
+        self.calculate_features()
 
-        if self.width != 0:
-            self.angle = np.arctan(self.height / self.width)
+    def calculate_features(self):
+        height = self.y2 - self.y1
+        width = self.x2 - self.x1
+
+        if width != 0:
+            self.angle = np.arctan(height / width)
         else:
             self.angle = np.pi / 2
 
-        self.length = np.sqrt(self.width ** 2 + self.height ** 2)
-        self.horizontal = False
-        self.vertical = False
-        self.strength = 0
-        self.calculate_orientation()
-
-    def calculate_orientation(self):
-        """
-        update orientation and strength only if the line is horizontal or vertical
-        """
         sine = abs(np.sin(self.angle))
         cos = abs(np.cos(self.angle))
 
-        if sine > 0.96:
-            self.vertical = True
-            self.strength = sine * self.height
-        elif cos > 0.96:
-            self.horizontal = True
-            self.strength = cos * self.width
+        if sine > ANGLE:
+            self.orientation = Orientation.VERTICAL
+            self.length = height
+            self.center = (self.x1 + self.x2) / 2
+            self.strength = sine * height
+        elif cos > ANGLE:
+            self.orientation = Orientation.HORIZONTAL
+            self.length = width
+            self.center = (self.y1 + self.y2) / 2
+            self.strength = cos * width
 
 
-class BoundaryExtraction:
-    def __init__(self, image, debug=True):
+class ImageSegmentor:
+    def __init__(self, image, orientation, debug=True):
+        self.__orientation = orientation
         self.__debug = debug
         self.__original_image = image
-        self.width = self.__original_image.shape[1]
-        self.height = self.__original_image.shape[0]
+        self.__image_width = self.__original_image.shape[1]
+        self.__image_height = self.__original_image.shape[0]
+        self.__image_length = self.__image_width if self.__orientation == Orientation.HORIZONTAL else self.__image_height
+        self.__image_length_other = self.__image_height if self.__orientation == Orientation.HORIZONTAL else self.__image_width
         self.__image = None
         self.__all_lines = []
-        self.__horizontal_lines = []
-        self.filtered_lines_by_y_center = []
-        self.__vertical_lines = []
+        self.__oriented_lines = []
+        self.filtered_lines_by_center = []
 
-        self.__shelves = []
+        self.__segments = []
 
-    def draw_lines(self, lines, name='lines', shape=None, wait_key=False):
+    def __draw_lines(self, lines, name='lines', shape=None, wait_key=False):
         if self.__debug:
             fld_lines = []
             if not shape:
@@ -64,10 +79,8 @@ class BoundaryExtraction:
             fld_lines = np.array(fld_lines)
             mask = fld.drawSegments(mask, fld_lines)
             cv.imshow(name, mask)
-            if wait_key:
-                cv.waitKey(0)
 
-    def fix_image(self):
+    def __fix_image(self):
         """
         preprocess image to:
             1. fix lightening issues
@@ -78,7 +91,7 @@ class BoundaryExtraction:
         # self.__image = cv.blur(self.__image, (3, 3))
         # cv.imshow('fixed image', self.__image)
 
-    def extract_lines(self):
+    def __extract_lines(self):
         """
         extract lines from the image using opencv fast line detector, and calculate it's x and y center and
         the angle on horizontal access
@@ -89,95 +102,99 @@ class BoundaryExtraction:
             for x1, y1, x2, y2 in lines:
                 line = Line(x1, y1, x2, y2)
                 self.__all_lines.append(line)
-                if line.horizontal and line.width >= 0.07 * self.width:
-                    self.__horizontal_lines.append(line)
-                elif line.vertical and line.height >= 0.07 * self.height:
-                    self.__vertical_lines.append(line)
+                if line.orientation == self.__orientation and line.length >= LINE_PERC * self.__image_length:
+                    self.__oriented_lines.append(line)
+        self.__oriented_lines.sort(key=lambda line: line.center)
+        self.__draw_lines(self.__all_lines, 'All lines')
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines')
 
-        self.draw_lines(self.__all_lines, 'All lines')
-        self.draw_lines(self.__horizontal_lines, 'horizontal')
-        self.draw_lines(self.__vertical_lines, 'vertical')
-
-    def extract_shelves_coordinates(self):
-        for index in range(len(self.__horizontal_lines)):
+    def __calculate_cuts_coordinates(self):
+        for index in range(len(self.__oriented_lines)):
             i = 0
-            self.__horizontal_lines[index].strength += self.__horizontal_lines[index].strength
-            while index + i < len(self.__horizontal_lines) and self.__horizontal_lines[index + i].y_center - self.__horizontal_lines[index].y_center <= 15:
-                self.__horizontal_lines[index].strength += self.__horizontal_lines[index + i].strength
-                self.__horizontal_lines[index + i].strength += self.__horizontal_lines[index].strength
+            self.__oriented_lines[index].strength += self.__oriented_lines[index].strength
+            while index + i < len(self.__oriented_lines) and self.__oriented_lines[index + i].center - \
+                    self.__oriented_lines[index].center <= NEIGHBOURS_LIMIT:
+                self.__oriented_lines[index].strength += self.__oriented_lines[index + i].strength
+                self.__oriented_lines[index + i].strength += self.__oriented_lines[index].strength
                 i += 1
 
-        self.filtered_lines_by_y_center = []
-        last_y_center = self.__horizontal_lines[0].y_center
-        max_line = self.__horizontal_lines[0]
-        for line in self.__horizontal_lines:
-            if line.strength < self.width * 1.5 or line.width < 0.07 * self.width:
+        self.filtered_lines_by_center = []
+        last_center = self.__oriented_lines[0].center
+        max_line = self.__oriented_lines[0]
+        for line in self.__oriented_lines:
+            if line.strength < self.__image_width * 1.5 or line.length < 0.07 * self.__image_width:
                 continue
-            elif line.y_center - last_y_center < 10:
+            elif line.center - last_center < 10:
                 if line.strength > max_line.strength:
                     max_line = line
                 # max_line = line if line.strength > max_line.strength else max_line
             else:
                 # x1, y1, x2, y2, avg_x, sine, strength = max_line
-                self.filtered_lines_by_y_center.append(max_line)
+                self.filtered_lines_by_center.append(max_line)
                 # cv2.line(mask2, (x1, y1), (x2, y2), (255, 0, 0), 1)
                 # cv2.line(self.image, (x1, y1), (x2, y2), (0, 255, 0), 1)
                 max_line = line
-            last_y_center = line.y_center
+            last_center = line.center
 
-        self.filtered_lines_by_y_center.append(max_line)
+        self.filtered_lines_by_center.append(max_line)
 
-        self.draw_lines(self.filtered_lines_by_y_center, 'horizontal lines')
+        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines')
 
-    def extract_shelves(self):
-        last_line = self.filtered_lines_by_y_center[0]
-        y_cuts = [0]
-        current_y_cut = 0
+    def __extract_segments(self):
+        last_line = self.filtered_lines_by_center[0]
+        cuts = [0]
+        current_cut = 0
         num_lines = 0
-        for line in self.filtered_lines_by_y_center:
-            if line.y_center - last_line.y_center < self.height / 30:
-                current_y_cut += line.y_center
+        for line in self.filtered_lines_by_center:
+            if line.center - last_line.center < self.__image_length_other / 30:
+                current_cut += line.center
                 num_lines += 1
             else:
-                y_cuts.append(int(current_y_cut / max(num_lines, 1)))
+                cuts.append(int(current_cut / max(num_lines, 1)))
                 num_lines = 1
-                current_y_cut = line.y_center
+                current_cut = line.center
             last_line = line
-        y_cuts.append(int(current_y_cut / max(num_lines, 1)))
-        y_cuts.append(self.height - 1)  # todo add this to filtered lines
+        cuts.append(int(current_cut / max(num_lines, 1)))
+        cuts.append(self.__image_length_other - 1)  # todo add this to filtered lines
 
-        print(f'y_cuts: {y_cuts}')
-        # for cut in y_cuts:
-        #     cv2.line(self.image, (cut, 0), (cut, self.image.shape[0] - 1), (0, 0, 255), 1)
+        for cut_index in range(1, len(cuts)):
+            if self.__orientation == Orientation.HORIZONTAL:
+                segment = self.__original_image[cuts[cut_index - 1]: cuts[cut_index], 0: self.__image_length - 1]
+            else:
+                segment = self.__original_image[0: self.__image_length - 1, cuts[cut_index - 1]: cuts[cut_index]]
+            self.__segments.append(segment)
 
-        for cut_index in range(1, len(y_cuts)):
-            shelf = self.__image[y_cuts[cut_index - 1]: y_cuts[cut_index], 0: self.width - 1]
-            # spine = imutils.rotate(spine, 90)
-            self.__shelves.append(shelf)
+            if self.__debug:
+                cv.imshow(f'segment{cut_index}', segment)
+                cv.waitKey(0)
 
-            cv.imshow(f'shelf{cut_index}', shelf)
-
-        # cv.waitKey(0)
-
-    def extract_spines(self):
-        pass
-
-    def extract_books(self):
-        self.fix_image()
-        self.extract_lines()
-        self.extract_shelves_coordinates()
-        self.extract_shelves()
+    def extract_segments(self):
+        self.__fix_image()
+        self.__extract_lines()
+        self.__calculate_cuts_coordinates()
+        self.__extract_segments()
         if self.__debug:
             cv.waitKey(0)
+
+    def get_segments(self):
+        return self.__segments
 
 
 if __name__ == '__main__':
     path = 'images/01.png'
     image = cv.imread(path)
 
-    be = BoundaryExtraction(image)
-    be.extract_books()
+    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, debug=False)
+    shelves_segmentor.extract_segments()
 
-    x = np.arctan(float('inf'))
+    shelves = shelves_segmentor.get_segments()
 
-    print(x)
+    for i, shelf in enumerate(shelves):
+        cv.imwrite(f'images/output/shelf_{i}.png', shelf)
+        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, debug=False)
+        spines_segmentor.extract_segments()
+        spines = spines_segmentor.get_segments()
+
+        for j, spine in enumerate(spines):
+            cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
+
