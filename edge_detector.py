@@ -5,14 +5,11 @@ from skimage import measure
 import numpy as np
 import imutils
 
-
 from enum import Enum
-
 
 #### constants ####
 ANGLE = 0.96
-LINE_PERC = 0.05
-NEIGHBOURS_LIMIT = 15
+
 
 class Orientation(Enum):
     UNKNOWN = 0
@@ -56,10 +53,11 @@ class Line:
 
 
 class ImageSegmentor:
-    def __init__(self, image, orientation, debug=True):
-        self.__orientation = orientation
-        self.__debug = debug
+    def __init__(self, image, orientation, config, debug=True):
         self.__original_image = image
+        self.__orientation = orientation
+        self.__config = config
+        self.__debug = debug
         self.__image_width = self.__original_image.shape[1]
         self.__image_height = self.__original_image.shape[0]
         self.__image_length = self.__image_width if self.__orientation == Orientation.HORIZONTAL else self.__image_height
@@ -71,14 +69,14 @@ class ImageSegmentor:
 
         self.__segments = []
 
-    def __draw_lines(self, lines, name='lines', shape=None, wait_key=False):
+    def __draw_lines(self, lines, name='lines', shape=None):
         if self.__debug:
             fld_lines = []
             if not shape:
                 shape = self.__image.shape
             mask = np.zeros(shape)
 
-            fld = cv.ximgproc.createFastLineDetector()
+            fld = cv.ximgproc.createFastLineDetector(_distance_threshold=3,  _do_merge=True)
             for line in lines:
                 fld_lines.append([line.x1, line.y1, line.x2, line.y2])
             fld_lines = np.array(fld_lines)
@@ -93,7 +91,7 @@ class ImageSegmentor:
             3. apply gaussian filter
         """
         self.__image = cv.cvtColor(self.__original_image, cv.COLOR_BGR2GRAY)
-        # self.__image = cv.blur(self.__image, (3, 3))
+        self.__image = cv.blur(self.__image, (5, 5))
         # cv.imshow('fixed image', self.__image)
 
     def __extract_lines(self):
@@ -107,7 +105,7 @@ class ImageSegmentor:
             for x1, y1, x2, y2 in lines:
                 line = Line(x1, y1, x2, y2)
                 self.__all_lines.append(line)
-                if line.orientation == self.__orientation and line.length >= LINE_PERC * self.__image_length:
+                if line.orientation == self.__orientation and line.length >= self.__config['line_perc'] * self.__image_length:
                     self.__oriented_lines.append(line)
         self.__oriented_lines.sort(key=lambda line: line.center)
         self.__draw_lines(self.__all_lines, 'All lines')
@@ -118,7 +116,7 @@ class ImageSegmentor:
             i = 0
             self.__oriented_lines[index].strength += self.__oriented_lines[index].strength
             while index + i < len(self.__oriented_lines) and self.__oriented_lines[index + i].center - \
-                    self.__oriented_lines[index].center <= NEIGHBOURS_LIMIT:
+                    self.__oriented_lines[index].center <= self.__config['neighbours_distance']:
                 self.__oriented_lines[index].strength += self.__oriented_lines[index + i].strength
                 self.__oriented_lines[index + i].strength += self.__oriented_lines[index].strength
                 i += 1
@@ -129,7 +127,7 @@ class ImageSegmentor:
         last_center = self.__oriented_lines[0].center
         max_line = self.__oriented_lines[0]
         for line in self.__oriented_lines:
-            if line.strength < self.__image_width * 1.5 or line.length < 0.07 * self.__image_width:
+            if line.strength < self.__image_length * 1.5 or line.length < self.__config['line_perc'] * self.__image_length:
                 continue
             elif line.center - last_center < 10:
                 if line.strength > max_line.strength:
@@ -149,7 +147,7 @@ class ImageSegmentor:
 
     def __extract_segments(self):
         if not self.filtered_lines_by_center:
-            return 
+            return
         last_line = self.filtered_lines_by_center[0]
         cuts = [0]
         current_cut = 0
@@ -188,48 +186,25 @@ class ImageSegmentor:
     def get_segments(self):
         return self.__segments
 
-
-if __name__ == '__main__':
-    path = 'images/02.png'
-    image = cv.imread(path)
-
-    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, debug=True)
-    shelves_segmentor.extract_segments()
-
-    shelves = shelves_segmentor.get_segments()
-
-    print(f'shelves number: {len(shelves)}')
-    for i, shelf in enumerate(shelves):
-        cv.imwrite(f'images/output/shelf_{i}.png', shelf)
-        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, debug=True)
-        spines_segmentor.extract_segments()
-        spines = spines_segmentor.get_segments()
-
-        for j, spine in enumerate(spines):
-            cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
-
-
-
 def fix_glare(image):
-    #resize the image 
-    image = imutils.resize(image, height=500)
+    # resize the image
+    # image = imutils.resize(image, height=500)
     masked_image = np.copy(image)
 
     # #take copy of image
     # orig = image.copy()
 
-    #convert image to gray scale
+    # convert image to gray scale
+    # gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
-
     ########### to know glared areas
-    #convert to binary 
+    # convert to binary
     thresh = cv.threshold(gray, 200, 255, cv.THRESH_BINARY)[1]
 
-    #remove noises 
+    # remove noises
     thresh = cv.erode(thresh, None, iterations=2)
     thresh = cv.dilate(thresh, None, iterations=4)
-
 
     labels = measure.label(thresh, connectivity=2, background=0)
     mask = np.zeros(thresh.shape, dtype="uint8")
@@ -239,34 +214,67 @@ def fix_glare(image):
         # if this is the background label, ignore it
         if label == 0:
             continue
-        
+
         # otherwise, construct the label mask and count the
         # number of pixels
         labelMask = np.zeros(thresh.shape, dtype="uint8")
-        labelMask[labels == label] = 255  
+        labelMask[labels == label] = 255
         numPixels = cv.countNonZero(labelMask)
         masked_image[mask != 0] = [0, 0, 0]
-
 
         # if the number of pixels in the component is sufficiently
         # large, then add it to our mask of "large blobs"
         if numPixels > 300:
             mask = cv.add(mask, labelMask)
 
-
     # find the contours in the mask, then sort them from left to right
     cnts = cv.findContours(mask.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
 
-    # edit light of contour 
+    # edit light of contour
     brightness = 50
     contrast = 30
 
-    cnt_image =  image -  masked_image
-    cnt_image  = np.int16(cnt_image )
-    cnt_image  = cnt_image  * (contrast/127+1) - contrast - brightness
-    cnt_image  = np.clip(cnt_image , 0, 255)
-    cnt_image  = np.uint8(cnt_image )   
-        
-    unglared_image = masked_image + cnt_image 
+    cnt_image = image - masked_image
+    cnt_image = np.int16(cnt_image)
+    cnt_image = cnt_image * (contrast / 127 + 1) - contrast - brightness
+    cnt_image = np.clip(cnt_image, 0, 255)
+    cnt_image = np.uint8(cnt_image)
+
+    unglared_image = masked_image + cnt_image
     return unglared_image
+
+if __name__ == '__main__':
+    path = 'images/output/spine_0.3.png'
+    path = 'images/02.png'
+    image = cv.imread(path)
+    config = {
+        'angle': 0.96,
+        'line_perc': 0.03,
+        'neighbours_distance': 15
+    }
+
+    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, config, debug=True)
+    shelves_segmentor.extract_segments()
+
+    shelves = shelves_segmentor.get_segments()
+
+    print(f'shelves number: {len(shelves)}')
+    for i, shelf in enumerate(shelves):
+        if shelf.shape[0] < 0.2 * image.shape[0]:
+            continue
+        cv.imwrite(f'images/output/shelf_{i}.png', shelf)
+        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, config, debug=True)
+        spines_segmentor.extract_segments()
+        spines = spines_segmentor.get_segments()
+
+        for j, spine in enumerate(spines):
+            cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
+
+    image2 = fix_glare(image)
+
+    cv.imshow('f', image)
+    cv.imshow('f2', image2)
+    cv.waitKey(0)
+
+
