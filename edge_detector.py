@@ -119,6 +119,8 @@ class ImageSegmentor:
                 i += 1
 
         self.filtered_lines_by_center = []
+        if not self.__oriented_lines:
+            return
         last_center = self.__oriented_lines[0].center
         max_line = self.__oriented_lines[0]
         for line in self.__oriented_lines:
@@ -141,6 +143,8 @@ class ImageSegmentor:
         self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines')
 
     def __extract_segments(self):
+        if not self.filtered_lines_by_center:
+            return 
         last_line = self.filtered_lines_by_center[0]
         cuts = [0]
         current_cut = 0
@@ -166,7 +170,7 @@ class ImageSegmentor:
 
             if self.__debug:
                 cv.imshow(f'segment{cut_index}', segment)
-                cv.waitKey(0)
+                # cv.waitKey(0)
 
     def extract_segments(self):
         self.__fix_image()
@@ -181,17 +185,18 @@ class ImageSegmentor:
 
 
 if __name__ == '__main__':
-    path = 'images/01.png'
+    path = 'images/02.png'
     image = cv.imread(path)
 
-    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, debug=False)
+    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, debug=True)
     shelves_segmentor.extract_segments()
 
     shelves = shelves_segmentor.get_segments()
 
+    print(f'shelves number: {len(shelves)}')
     for i, shelf in enumerate(shelves):
         cv.imwrite(f'images/output/shelf_{i}.png', shelf)
-        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, debug=False)
+        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, debug=True)
         spines_segmentor.extract_segments()
         spines = spines_segmentor.get_segments()
 
