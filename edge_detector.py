@@ -1,6 +1,11 @@
 import cv2 as cv
 import numpy as np
 
+from skimage import measure
+import numpy as np
+import imutils
+
+
 from enum import Enum
 
 
@@ -198,3 +203,65 @@ if __name__ == '__main__':
         for j, spine in enumerate(spines):
             cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
 
+
+
+def fix_glare(image):
+    #resize the image 
+    image = imutils.resize(image, height=500)
+    masked_image = np.copy(image)
+
+    # #take copy of image
+    # orig = image.copy()
+
+    #convert image to gray scale
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+
+
+    ########### to know glared areas
+    #convert to binary 
+    thresh = cv.threshold(gray, 200, 255, cv.THRESH_BINARY)[1]
+
+    #remove noises 
+    thresh = cv.erode(thresh, None, iterations=2)
+    thresh = cv.dilate(thresh, None, iterations=4)
+
+
+    labels = measure.label(thresh, connectivity=2, background=0)
+    mask = np.zeros(thresh.shape, dtype="uint8")
+
+    # loop over the unique components
+    for label in np.unique(labels):
+        # if this is the background label, ignore it
+        if label == 0:
+            continue
+        
+        # otherwise, construct the label mask and count the
+        # number of pixels
+        labelMask = np.zeros(thresh.shape, dtype="uint8")
+        labelMask[labels == label] = 255  
+        numPixels = cv.countNonZero(labelMask)
+        masked_image[mask != 0] = [0, 0, 0]
+
+
+        # if the number of pixels in the component is sufficiently
+        # large, then add it to our mask of "large blobs"
+        if numPixels > 300:
+            mask = cv.add(mask, labelMask)
+
+
+    # find the contours in the mask, then sort them from left to right
+    cnts = cv.findContours(mask.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    cnts = imutils.grab_contours(cnts)
+
+    # edit light of contour 
+    brightness = 50
+    contrast = 30
+
+    cnt_image =  image -  masked_image
+    cnt_image  = np.int16(cnt_image )
+    cnt_image  = cnt_image  * (contrast/127+1) - contrast - brightness
+    cnt_image  = np.clip(cnt_image , 0, 255)
+    cnt_image  = np.uint8(cnt_image )   
+        
+    unglared_image = masked_image + cnt_image 
+    return unglared_image
