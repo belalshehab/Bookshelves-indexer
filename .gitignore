@@ -21,3 +21,4 @@ dist
 *.app
 *.dmg
 images/output
+.google-cookie
