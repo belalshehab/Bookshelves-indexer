@@ -1,14 +1,14 @@
+import copy
+
 import cv2 as cv
 import numpy as np
 
 from skimage import measure
 import numpy as np
 import imutils
-
 from enum import Enum
 
-#### constants ####
-ANGLE = 0.96
+Angle_Margin = 0.98
 
 
 class Orientation(Enum):
@@ -40,19 +40,19 @@ class Line:
         sine = abs(np.sin(self.angle))
         cos = abs(np.cos(self.angle))
 
-        if sine > ANGLE:
+        if sine > Angle_Margin:
             self.orientation = Orientation.VERTICAL
             self.length = height
             self.center = (self.x1 + self.x2) / 2
             self.strength = sine * height
-        elif cos > ANGLE:
+        elif cos > Angle_Margin:
             self.orientation = Orientation.HORIZONTAL
             self.length = width
             self.center = (self.y1 + self.y2) / 2
             self.strength = cos * width
 
 
-class ImageSegmentor:
+class ImageSegmenter:
     def __init__(self, image, orientation, config, debug=True):
         self.__original_image = image
         self.__orientation = orientation
@@ -66,21 +66,17 @@ class ImageSegmentor:
         self.__all_lines = []
         self.__oriented_lines = []
         self.filtered_lines_by_center = []
-
         self.__segments = []
 
-    def __draw_lines(self, lines, name='lines', shape=None):
+    def __draw_lines(self, lines, name='lines', mask=None, print_strength=False):
         if self.__debug:
-            fld_lines = []
-            if not shape:
-                shape = self.__image.shape
-            mask = np.zeros(shape)
+            if mask is None:
+                mask = np.zeros_like(self.__image)
+            for i, line in enumerate(lines):
+                cv.line(mask, (line.x1, line.y1), (line.x2, line.y2), (255, 255, 0), 1)
+                if print_strength:
+                    cv.putText(mask, f'{i}:{round(line.strength)}', (line.x1, line.y1 - 1), cv.FONT_HERSHEY_SIMPLEX, 0.35, 255)
 
-            fld = cv.ximgproc.createFastLineDetector(_distance_threshold=3,  _do_merge=True)
-            for line in lines:
-                fld_lines.append([line.x1, line.y1, line.x2, line.y2])
-            fld_lines = np.array(fld_lines)
-            mask = fld.drawSegments(mask, fld_lines)
             cv.imshow(name, mask)
 
     def __fix_image(self):
@@ -91,59 +87,86 @@ class ImageSegmentor:
             3. apply gaussian filter
         """
         self.__image = cv.cvtColor(self.__original_image, cv.COLOR_BGR2GRAY)
-        self.__image = cv.blur(self.__image, (5, 5))
+        self.__image = cv.blur(self.__image, (3, 3))
         # cv.imshow('fixed image', self.__image)
 
     def __extract_lines(self):
         """
-        extract lines from the image using opencv fast line detector, and calculate it's x and y center and
-        the angle on horizontal access
+        extract lines from the image using Hough line detector, and calculate it's x and y center and
+        the angle on horizontal access, then use only the oriented lines
         """
-        fld = cv.ximgproc.createFastLineDetector()
-        fld_output = fld.detect(self.__image)
-        for lines in fld_output:
-            for x1, y1, x2, y2 in lines:
-                line = Line(x1, y1, x2, y2)
-                self.__all_lines.append(line)
-                if line.orientation == self.__orientation and line.length >= self.__config['line_perc'] * self.__image_length:
-                    self.__oriented_lines.append(line)
+        edges = cv.Canny(self.__image, 50, 150, apertureSize=3)
+        cv.imshow('edges', edges)
+
+        lines = cv.HoughLinesP(edges, 1, np.pi / 180, 150, maxLineGap=5).squeeze()
+        for x1, y1, x2, y2 in lines:
+            line = Line(x1, y1, x2, y2)
+            self.__all_lines.append(line)
+            if line.orientation == self.__orientation and line.length >= 0.0004 * self.__image_length:
+                self.__oriented_lines.append(line)
         self.__oriented_lines.sort(key=lambda line: line.center)
         self.__draw_lines(self.__all_lines, 'All lines')
-        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines')
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines', print_strength=True)
+
+    def __vote_for_strength_lines(self):
+        """
+        vote for lines with high strength and has lots of nieghbours
+        """
+        strengthened = copy.deepcopy(self.__oriented_lines)
+
+        for index, line in enumerate(self.__oriented_lines):
+            i = 1
+            strengthened[index].strength += 7 * line.strength
+            while index + i < len(self.__oriented_lines) and \
+                    self.__oriented_lines[index + i].center - self.__oriented_lines[index].center <= self.__config['neighbours_distance']:
+                strengthened[index].strength += self.__oriented_lines[index + i].strength
+                strengthened[index + i].strength += line.strength
+                i += 1
+        self.__oriented_lines = strengthened
 
     def __calculate_cuts_coordinates(self):
-        for index in range(len(self.__oriented_lines)):
-            i = 0
-            self.__oriented_lines[index].strength += self.__oriented_lines[index].strength
-            while index + i < len(self.__oriented_lines) and self.__oriented_lines[index + i].center - \
-                    self.__oriented_lines[index].center <= self.__config['neighbours_distance']:
-                self.__oriented_lines[index].strength += self.__oriented_lines[index + i].strength
-                self.__oriented_lines[index + i].strength += self.__oriented_lines[index].strength
-                i += 1
+        self.__vote_for_strength_lines()
+        a = []
+        for line in self.__oriented_lines:
+            if (line.center <= (0.1 * self.__image_length_other)) or (
+                    line.center >= (0.9 * self.__image_length_other)):
+                continue
+            else:
+                a.append(line)
+        self.__oriented_lines = a
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines',
+                          print_strength=True)
 
-        self.filtered_lines_by_center = []
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} lines strengthed',
+                          print_strength=True)
+
+        filtered_lines_by_center = []
         if not self.__oriented_lines:
             return
         last_center = self.__oriented_lines[0].center
-        max_line = self.__oriented_lines[0]
-        for line in self.__oriented_lines:
-            if line.strength < self.__image_length * 1.5 or line.length < self.__config['line_perc'] * self.__image_length:
+        # max_line = self.__oriented_lines[0]
+        max_line = None
+        print(f'img.l: {self.__image_length}')
+        for i, line in enumerate(self.__oriented_lines):
+            print(f'l: {line.length}, s: {line.strength}')
+            if line.strength < self.__image_length * 0.85 or line.length < self.__config['line_perc'] * self.__image_length:
                 continue
-            elif line.center - last_center < 10:
+            if max_line is None:
+                max_line = line
+            elif line.center - last_center < self.__config.get('minimum_distance', self.__image_length_other / 10):
                 if line.strength > max_line.strength:
                     max_line = line
-                # max_line = line if line.strength > max_line.strength else max_line
             else:
-                # x1, y1, x2, y2, avg_x, sine, strength = max_line
-                self.filtered_lines_by_center.append(max_line)
-                # cv2.line(mask2, (x1, y1), (x2, y2), (255, 0, 0), 1)
-                # cv2.line(self.image, (x1, y1), (x2, y2), (0, 255, 0), 1)
+                filtered_lines_by_center.append(max_line)
                 max_line = line
             last_center = line.center
+        if max_line:
+            filtered_lines_by_center.append(max_line)
+        self.filtered_lines_by_center = filtered_lines_by_center
 
-        self.filtered_lines_by_center.append(max_line)
-
-        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines')
+        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines', print_strength=True)
+        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines image',
+                          mask=self.__image)
 
     def __extract_segments(self):
         if not self.filtered_lines_by_center:
@@ -176,8 +199,11 @@ class ImageSegmentor:
                 # cv.waitKey(0)
 
     def extract_segments(self):
+        # Preprocess image
         self.__fix_image()
+        # extract lines using houghline detection, and filter it by the desired orientation
         self.__extract_lines()
+        #
         self.__calculate_cuts_coordinates()
         self.__extract_segments()
         if self.__debug:
@@ -185,6 +211,7 @@ class ImageSegmentor:
 
     def get_segments(self):
         return self.__segments
+
 
 def fix_glare(image):
     # resize the image
@@ -244,37 +271,36 @@ def fix_glare(image):
     unglared_image = masked_image + cnt_image
     return unglared_image
 
+
 if __name__ == '__main__':
-    path = 'images/output/spine_0.3.png'
-    path = 'images/02.png'
-    image = cv.imread(path)
+    path = 'images/maktaba/0{}.jpg'
     config = {
         'angle': 0.96,
         'line_perc': 0.03,
         'neighbours_distance': 15
     }
 
-    shelves_segmentor = ImageSegmentor(image, Orientation.HORIZONTAL, config, debug=True)
-    shelves_segmentor.extract_segments()
+    for i in range(1, 9):
+        image = cv.imread(path.format(i))
 
-    shelves = shelves_segmentor.get_segments()
+        config['neighbours_distance'] = 0.02 * image.shape[0]
+        shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=True)
+        shelves_segmentor.extract_segments()
 
-    print(f'shelves number: {len(shelves)}')
-    for i, shelf in enumerate(shelves):
-        if shelf.shape[0] < 0.2 * image.shape[0]:
-            continue
-        cv.imwrite(f'images/output/shelf_{i}.png', shelf)
-        spines_segmentor = ImageSegmentor(shelf, Orientation.VERTICAL, config, debug=True)
-        spines_segmentor.extract_segments()
-        spines = spines_segmentor.get_segments()
+        shelves = shelves_segmentor.get_segments()
 
-        for j, spine in enumerate(spines):
-            cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
+        print(f'shelves number: {len(shelves)}')
+        cv.waitKey(0)
 
-    image2 = fix_glare(image)
+    # for i, shelf in enumerate(shelves):
+    #     if shelf.shape[0] < 0.2 * image.shape[0]:
+    #         continue
+    #     cv.imwrite(f'images/output/shelf_{i}.png', shelf)
+    #     spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
+    #     spines_segmentor.extract_segments()
+    #     spines = spines_segmentor.get_segments()
+    #
+    #     for j, spine in enumerate(spines):
+    #         cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
 
-    cv.imshow('f', image)
-    cv.imshow('f2', image2)
     cv.waitKey(0)
-
-
