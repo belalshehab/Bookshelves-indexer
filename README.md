@@ -1,1 +1,0 @@
-# Bookshelves-indexer

@@ -20,9 +20,4 @@ dist
 *.exe
 *.app
 *.dmg
-installer/output/packages/org.OCR.RenderShare/data/*
-installer/output/Updater
-
-# update example files
-installer/update/Updater*
-installer/update/data/*
+images/output
