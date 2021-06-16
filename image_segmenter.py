@@ -96,7 +96,8 @@ class ImageSegmenter:
         the angle on horizontal access, then use only the oriented lines
         """
         edges = cv.Canny(self.__image, 50, 150, apertureSize=3)
-        cv.imshow('edges', edges)
+        if self.__debug:
+            cv.imshow('edges', edges)
 
         lines = cv.HoughLinesP(edges, 1, np.pi / 180, 150, maxLineGap=5).squeeze()
         for x1, y1, x2, y2 in lines:
@@ -108,84 +109,74 @@ class ImageSegmenter:
         self.__draw_lines(self.__all_lines, 'All lines')
         self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines', print_strength=True)
 
-    def __vote_for_strength_lines(self):
+    def __remove_close_to_boundaries_lines(self):
         """
-        vote for lines with high strength and has lots of nieghbours
+        removes lines that is very close to image boundries
+        """
+        lower_boundary = self.__config['boundaries_offset'] * self.__image_length_other
+        upper_boundary = (1 - self.__config['boundaries_offset']) * self.__image_length_other
+        self.__oriented_lines = [line for line in self.__oriented_lines if lower_boundary < line.center < upper_boundary]
+
+    def __vote_for_strong_lines(self):
+        """
+        1. vote for lines with high strength and close neighbours.
+        2. remove the lines with very small length or less than minimum strength
         """
         strengthened = copy.deepcopy(self.__oriented_lines)
-
+        neighbours_distance = self.__config.get('neighbours_distance', 0.1) * self.__image_length_other
         for index, line in enumerate(self.__oriented_lines):
             i = 1
             strengthened[index].strength += 7 * line.strength
             while index + i < len(self.__oriented_lines) and \
-                    self.__oriented_lines[index + i].center - self.__oriented_lines[index].center <= self.__config['neighbours_distance']:
+                    self.__oriented_lines[index + i].center - self.__oriented_lines[index].center <= neighbours_distance:
                 strengthened[index].strength += self.__oriented_lines[index + i].strength
                 strengthened[index + i].strength += line.strength
                 i += 1
-        self.__oriented_lines = strengthened
 
-    def __calculate_cuts_coordinates(self):
-        self.__vote_for_strength_lines()
-        a = []
-        for line in self.__oriented_lines:
-            if (line.center <= (0.1 * self.__image_length_other)) or (
-                    line.center >= (0.9 * self.__image_length_other)):
-                continue
-            else:
-                a.append(line)
-        self.__oriented_lines = a
-        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines',
+        minimum_strength = self.__config.get('minimum_strength', 0.85) * self.__image_length
+        minimum_length = self.__config.get('minimum_length', 0.03) * self.__image_length
+        self.__oriented_lines = [line for line in strengthened if line.strength > minimum_strength and line.length > minimum_length]
+
+    def __remove_duplicate_lines(self):
+        """
+        remove duplicate lines by choosing the strongest line
+        """
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} lines strengthened',
                           print_strength=True)
-
-        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} lines strengthed',
-                          print_strength=True)
-
-        filtered_lines_by_center = []
+        self.filtered_lines_by_center = []
         if not self.__oriented_lines:
             return
+        neighbours_distance = self.__config.get('neighbours_distance', 0.1) * self.__image_length_other
         last_center = self.__oriented_lines[0].center
-        # max_line = self.__oriented_lines[0]
-        max_line = None
-        print(f'img.l: {self.__image_length}')
-        for i, line in enumerate(self.__oriented_lines):
-            print(f'l: {line.length}, s: {line.strength}')
-            if line.strength < self.__image_length * 0.85 or line.length < self.__config['line_perc'] * self.__image_length:
-                continue
-            if max_line is None:
-                max_line = line
-            elif line.center - last_center < self.__config.get('minimum_distance', self.__image_length_other / 10):
+        max_line = self.__oriented_lines[0]
+        for index, line in enumerate(self.__oriented_lines):
+            if line.center - last_center < neighbours_distance:
                 if line.strength > max_line.strength:
                     max_line = line
             else:
-                filtered_lines_by_center.append(max_line)
+                self.filtered_lines_by_center.append(max_line)
                 max_line = line
             last_center = line.center
-        if max_line:
-            filtered_lines_by_center.append(max_line)
-        self.filtered_lines_by_center = filtered_lines_by_center
+        self.filtered_lines_by_center.append(max_line)
 
-        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines', print_strength=True)
+        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines',
+                          print_strength=True)
         self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines image',
                           mask=self.__image)
 
     def __extract_segments(self):
+        """
+        prepare the cutoffs and segment the image
+        """
         if not self.filtered_lines_by_center:
             return
-        last_line = self.filtered_lines_by_center[0]
-        cuts = [0]
+        cuts = []
         current_cut = 0
-        num_lines = 0
         for line in self.filtered_lines_by_center:
-            if line.center - last_line.center < self.__image_length_other / 30:
-                current_cut += line.center
-                num_lines += 1
-            else:
-                cuts.append(int(current_cut / max(num_lines, 1)))
-                num_lines = 1
-                current_cut = line.center
-            last_line = line
-        cuts.append(int(current_cut / max(num_lines, 1)))
-        cuts.append(self.__image_length_other - 1)  # todo add this to filtered lines
+            cuts.append(current_cut)
+            current_cut = int(line.center)
+        cuts.append(current_cut)
+        cuts.append(self.__image_length_other - 1)
 
         for cut_index in range(1, len(cuts)):
             if self.__orientation == Orientation.HORIZONTAL:
@@ -194,17 +185,12 @@ class ImageSegmenter:
                 segment = self.__original_image[0: self.__image_length - 1, cuts[cut_index - 1]: cuts[cut_index]]
             self.__segments.append(segment)
 
-            if self.__debug:
-                cv.imshow(f'segment{cut_index}', segment)
-                # cv.waitKey(0)
-
     def extract_segments(self):
-        # Preprocess image
         self.__fix_image()
-        # extract lines using houghline detection, and filter it by the desired orientation
         self.__extract_lines()
-        #
-        self.__calculate_cuts_coordinates()
+        self.__remove_close_to_boundaries_lines()
+        self.__vote_for_strong_lines()
+        self.__remove_duplicate_lines()
         self.__extract_segments()
         if self.__debug:
             cv.waitKey(0)
@@ -276,20 +262,21 @@ if __name__ == '__main__':
     path = 'images/maktaba/0{}.jpg'
     config = {
         'angle': 0.96,
-        'line_perc': 0.03,
-        'neighbours_distance': 15
+        'minimum_length': 0.03,
+        'minimum_strength': 0.85,
+        'boundaries_offset': 0.1,
+        'neighbours_distance': 0.1
     }
 
     for i in range(1, 9):
         image = cv.imread(path.format(i))
-
-        config['neighbours_distance'] = 0.02 * image.shape[0]
-        shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=True)
+        cv.imshow(f'{i}', image)
+        shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
         shelves_segmentor.extract_segments()
-
         shelves = shelves_segmentor.get_segments()
-
         print(f'shelves number: {len(shelves)}')
+        for j, shelf in enumerate(shelves):
+            cv.imshow(f'{i}:{j}', shelf)
         cv.waitKey(0)
 
     # for i, shelf in enumerate(shelves):
