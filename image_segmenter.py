@@ -29,8 +29,8 @@ class Line:
         self.calculate_features()
 
     def calculate_features(self):
-        height = self.y2 - self.y1
-        width = self.x2 - self.x1
+        height = abs(self.y2 - self.y1)
+        width = abs(self.x2 - self.x1)
 
         if width != 0:
             self.angle = np.arctan(height / width)
@@ -75,7 +75,8 @@ class ImageSegmenter:
             for i, line in enumerate(lines):
                 cv.line(mask, (line.x1, line.y1), (line.x2, line.y2), (255, 255, 0), 1)
                 if print_strength:
-                    cv.putText(mask, f'{i}:{round(line.strength)}', (line.x1, line.y1 - 1), cv.FONT_HERSHEY_SIMPLEX, 0.35, 255)
+                    cv.putText(mask, f'{i}:{round(line.strength)}', (line.x1, line.y1 - 1), cv.FONT_HERSHEY_SIMPLEX,
+                               0.35, 255)
 
             cv.imshow(name, mask)
 
@@ -103,11 +104,12 @@ class ImageSegmenter:
         for x1, y1, x2, y2 in lines:
             line = Line(x1, y1, x2, y2)
             self.__all_lines.append(line)
-            if line.orientation == self.__orientation and line.length >= 0.0004 * self.__image_length:
+            if line.orientation == self.__orientation and line.length >= 0.06 * self.__image_length:
                 self.__oriented_lines.append(line)
         self.__oriented_lines.sort(key=lambda line: line.center)
         self.__draw_lines(self.__all_lines, 'All lines')
-        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines', print_strength=True)
+        self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} oriented lines',
+                          print_strength=True)
 
     def __remove_close_to_boundaries_lines(self):
         """
@@ -115,7 +117,8 @@ class ImageSegmenter:
         """
         lower_boundary = self.__config['boundaries_offset'] * self.__image_length_other
         upper_boundary = (1 - self.__config['boundaries_offset']) * self.__image_length_other
-        self.__oriented_lines = [line for line in self.__oriented_lines if lower_boundary < line.center < upper_boundary]
+        self.__oriented_lines = [line for line in self.__oriented_lines if
+                                 lower_boundary < line.center < upper_boundary]
 
     def __vote_for_strong_lines(self):
         """
@@ -128,14 +131,16 @@ class ImageSegmenter:
             i = 1
             strengthened[index].strength += 7 * line.strength
             while index + i < len(self.__oriented_lines) and \
-                    self.__oriented_lines[index + i].center - self.__oriented_lines[index].center <= neighbours_distance:
+                    self.__oriented_lines[index + i].center - self.__oriented_lines[
+                index].center <= neighbours_distance:
                 strengthened[index].strength += self.__oriented_lines[index + i].strength
                 strengthened[index + i].strength += line.strength
                 i += 1
 
         minimum_strength = self.__config.get('minimum_strength', 0.85) * self.__image_length
         minimum_length = self.__config.get('minimum_length', 0.03) * self.__image_length
-        self.__oriented_lines = [line for line in strengthened if line.strength > minimum_strength and line.length > minimum_length]
+        self.__oriented_lines = [line for line in strengthened if
+                                 line.strength > minimum_strength and line.length > minimum_length]
 
     def __remove_duplicate_lines(self):
         """
@@ -258,36 +263,74 @@ def fix_glare(image):
     return unglared_image
 
 
-if __name__ == '__main__':
-    path = 'images/maktaba/0{}.jpg'
+def get_shelves(image):
     config = {
-        'angle': 0.96,
         'minimum_length': 0.03,
         'minimum_strength': 0.85,
         'boundaries_offset': 0.1,
         'neighbours_distance': 0.1
     }
 
-    for i in range(1, 9):
+    shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
+    shelves_segmentor.extract_segments()
+    shelves = shelves_segmentor.get_segments()
+
+    return shelves
+
+
+def get_spines(shelf):
+    config = {
+        'minimum_length': 0.03,
+        'minimum_strength': 0.85,
+        'boundaries_offset': 0.001,
+        'neighbours_distance': 0.1
+    }
+
+    spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
+    spines_segmentor.extract_segments()
+    spines = spines_segmentor.get_segments()
+    print(f'spines number: {len(spines)}')
+    for j, spine in enumerate(spines):
+        cv.imshow(f'{i}:{j}', spine)
+    cv.waitKey(0)
+
+    return spines
+
+
+if __name__ == '__main__':
+    path = 'images/maktaba/0{}.jpg'
+    # config = {
+    #     'minimum_length': 0.03,
+    #     'minimum_strength': 0.85,
+    #     'boundaries_offset': 0.1,
+    #     'neighbours_distance': 0.1
+    # }
+
+    for i in range(1, 10):
         image = cv.imread(path.format(i))
         cv.imshow(f'{i}', image)
-        shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
-        shelves_segmentor.extract_segments()
-        shelves = shelves_segmentor.get_segments()
+        shelves = get_shelves(image)
         print(f'shelves number: {len(shelves)}')
         for j, shelf in enumerate(shelves):
+            cv.imwrite(f'images/output/{i}_{j}.jpg', shelf)
             cv.imshow(f'{i}:{j}', shelf)
-        cv.waitKey(0)
+        # cv.waitKey(0)
 
-    # for i, shelf in enumerate(shelves):
-    #     if shelf.shape[0] < 0.2 * image.shape[0]:
-    #         continue
-    #     cv.imwrite(f'images/output/shelf_{i}.png', shelf)
-    #     spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
-    #     spines_segmentor.extract_segments()
-    #     spines = spines_segmentor.get_segments()
+    # path = 'images/maktaba/01.jpg'
+    # image = cv.imread(path)
+    # shelves = get_shelves(image)
     #
-    #     for j, spine in enumerate(spines):
-    #         cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
-
-    cv.waitKey(0)
+    # get_spines(shelves[0])
+    # #
+    # # for i, shelf in enumerate(shelves):
+    # #     if shelf.shape[0] < 0.2 * image.shape[0]:
+    # #         continue
+    # #     cv.imwrite(f'images/output/shelf_{i}.png', shelf)
+    # #     spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
+    # #     spines_segmentor.extract_segments()
+    # #     spines = spines_segmentor.get_segments()
+    # #
+    # #     for j, spine in enumerate(spines):
+    # #         cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
+    #
+    # cv.waitKey(0)
