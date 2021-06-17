@@ -1,15 +1,20 @@
 {
   "shelves_segmenter": {
-        "minimum_length": 0.03,
-        "minimum_strength": 0.85,
-        "boundaries_offset": 0.1,
-        "neighbours_distance": 0.1
-    },
-
+    "minimum_length": 0.03,
+    "minimum_strength": 0.85,
+    "boundaries_offset": 0.1,
+    "neighbours_distance": 0.1,
+    "angle_margin": 0.98,
+    "Hough_threshold": 150,
+    "Hough_max_line_gap": 5
+  },
   "spines_segmenter": {
-        "minimum_length": 0.03,
-        "minimum_strength": 0.85,
-        "boundaries_offset": 0.001,
-        "neighbours_distance": 0.1
-    }
+    "minimum_length": 0.091,
+    "minimum_strength": 1.34,
+    "boundaries_offset": 0.0,
+    "neighbours_distance": 0.014,
+    "angle_margin": 0.94,
+    "Hough_threshold": 0,
+    "Hough_max_line_gap": 0
+  }
 }

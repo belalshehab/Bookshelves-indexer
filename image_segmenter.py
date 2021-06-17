@@ -1,4 +1,5 @@
 import copy
+import json
 
 import cv2 as cv
 import numpy as np
@@ -6,8 +7,6 @@ import numpy as np
 from skimage import measure
 import imutils
 from enum import Enum
-
-Angle_Margin = 0.98
 
 
 class Orientation(Enum):
@@ -17,17 +16,20 @@ class Orientation(Enum):
 
 
 class Line:
-    def __init__(self, *args):
-        self.x1, self.y1, self.x2, self.y2 = args
+    def __init__(self, x1, y1, x2, y2, angle_margin):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
 
         self.angle = 0
         self.length = 0
         self.orientation = Orientation.UNKNOWN
         self.center = 0
         self.strength = 0
-        self.calculate_features()
+        self.calculate_features(angle_margin)
 
-    def calculate_features(self):
+    def calculate_features(self, angle_margin):
         height = abs(self.y2 - self.y1)
         width = abs(self.x2 - self.x1)
 
@@ -39,12 +41,12 @@ class Line:
         sine = abs(np.sin(self.angle))
         cos = abs(np.cos(self.angle))
 
-        if sine > Angle_Margin:
+        if sine > angle_margin:
             self.orientation = Orientation.VERTICAL
             self.length = height
             self.center = (self.x1 + self.x2) / 2
             self.strength = sine * height
-        elif cos > Angle_Margin:
+        elif cos > angle_margin:
             self.orientation = Orientation.HORIZONTAL
             self.length = width
             self.center = (self.y1 + self.y2) / 2
@@ -77,7 +79,6 @@ class ImageSegmenter:
                 if print_strength:
                     cv.putText(mask, f'{i}:{round(line.strength)}', (line.x1, line.y1 - 1), cv.FONT_HERSHEY_SIMPLEX,
                                0.35, 255)
-
             cv.imshow(name, mask)
 
     def __fix_image(self):
@@ -100,9 +101,14 @@ class ImageSegmenter:
         if self.__debug:
             cv.imshow('edges', edges)
 
-        lines = cv.HoughLinesP(edges, 1, np.pi / 180, 150, maxLineGap=5).squeeze()
+        if self.__config.get('Hough_threshold'):
+            lines = cv.HoughLinesP(edges, 1, np.pi / 180, self.__config.get('Hough_threshold'),
+                                   maxLineGap=self.__config.get('Hough_max_line_gap')).squeeze()
+        else:
+            fld = cv.ximgproc.createFastLineDetector()
+            lines = fld.detect(self.__image).squeeze()
         for x1, y1, x2, y2 in lines:
-            line = Line(x1, y1, x2, y2)
+            line = Line(int(x1), int(y1), int(x2), int(y2), self.__config.get('angle_margin'))
             self.__all_lines.append(line)
             if line.orientation == self.__orientation and line.length >= 0.06 * self.__image_length:
                 self.__oriented_lines.append(line)
@@ -271,13 +277,10 @@ def fix_glare(image):
     return unglared_image
 
 
-def get_shelves(image):
-    config = {
-        'minimum_length': 0.03,
-        'minimum_strength': 0.85,
-        'boundaries_offset': 0.1,
-        'neighbours_distance': 0.1
-    }
+def get_shelves(image, config=None):
+    if config is None:
+        with open('config.json', 'r') as f:
+            config = json.load(f).get('shelves_segmenter')
 
     shelves_segmenter = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
     shelves_segmenter.extract_segments()
@@ -286,22 +289,18 @@ def get_shelves(image):
     return shelves
 
 
-def get_spines(shelf):
-    config = {
-        'minimum_length': 0.03,
-        'minimum_strength': 0.85,
-        'boundaries_offset': 0.001,
-        'neighbours_distance': 0.1
-    }
+def get_spines(shelf, config=None):
+    if config is None:
+        with open('config.json', 'r') as f:
+            config = json.load(f).get('spines_segmenter')
 
     spines_segmenter = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
     spines_segmenter.extract_segments()
     spines = spines_segmenter.get_segments()
     print(f'spines number: {len(spines)}')
-    for j, spine in enumerate(spines):
-        cv.imshow(f'{i}:{j}', spine)
-    cv.waitKey(0)
-
+    # for j, spine in enumerate(spines):
+    #     cv.imshow(f'{i}:{j}', spine)
+    # cv.waitKey(0)
     return spines
 
 

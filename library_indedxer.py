@@ -53,27 +53,29 @@ class LibraryIndexer:
 
     def extract_books_info(self):
         for index, book in enumerate(self.__books):
+            progress = round(index / len(self.__books), 2)
+            print(f'prog: {progress}')
             infoExtractor = InfoExtractor(book.spine, book)
             self.__books[index] = infoExtractor.extract_book_info()
-            return self.__books
+        return self.__books
 
     def get_books(self):
         return self.__books
 
 
 if __name__ == '__main__':
-    path = 'images/maktaba/01.jpg'
+    path = 'images/maktaba/04.jpg'
     library = cv.imread(path)
     library_copy = np.copy(library)
     library_indexer = LibraryIndexer(library)
-    books = library_indexer.extract_books()
+    library_indexer.extract_books()
     books = library_indexer.extract_books_info()
 
     for book in books:
         p0 = book.bounding_rectangle[0]
         p1 = book.bounding_rectangle[1]
         print(book)
-        cv.imshow(f'{book.shelf}_{book.index}', book.spine)
+        # cv.imshow(f'{book.shelf}_{book.index}', book.spine)
         cv.rectangle(library_copy, p0, p1, (0, 255, 255), 3)
         center = (int((p0[0] + p1[0]) / 2), int((p0[1] + p1[1]) / 2))
         print(center)

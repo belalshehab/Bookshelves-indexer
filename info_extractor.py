@@ -3,6 +3,7 @@ from googlesearch import search
 from book import Book
 import pytesseract
 
+
 # pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
@@ -12,7 +13,6 @@ def bookname_search(text):
     bookName_search_url = next(gen)
     bookName = bookName_search_url[bookName_search_url.rfind(".") + 1:]
     book_name = bookName.replace("_", " ")
-    # print(bookName_search_url, "\n", bookName, "\n", book_name)
 
     return bookName_search_url, book_name
 
@@ -30,16 +30,22 @@ class InfoExtractor:
         """
         ocr operation
         """
-        self.__image = cv.rotate(self.__image, cv.ROTATE_90_COUNTERCLOCKWISE)
         gray = cv.cvtColor(self.__image, cv.COLOR_BGR2GRAY)
+        rotated = cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE)
         config = "--psm 3"
-        self.__book_info.ocr_output = pytesseract.image_to_string(gray, config=config)
+        self.__book_info.ocr_output = pytesseract.image_to_string(rotated, config=config)
+        rotated = cv.rotate(gray, cv.ROTATE_90_CLOCKWISE)
+        ocr = pytesseract.image_to_string(rotated, config=config)
+        if len(ocr) > len(self.__book_info.ocr_output):
+            self.__book_info.ocr_output = ocr
 
     def __goodreads_search(self):
         """
         search book name by the ocr output
         """
-        self.__book_info.book_url, self.__book_info.name = bookname_search(self.__book_info.ocr_output)
+        if len(self.__book_info.ocr_output) > 5:
+            print(f'searching ({len(self.__book_info.ocr_output)}): {self.__book_info.ocr_output}')
+            self.__book_info.book_url, self.__book_info.name = bookname_search(self.__book_info.ocr_output)
 
     def extract_book_info(self):
         self.__ocr()
