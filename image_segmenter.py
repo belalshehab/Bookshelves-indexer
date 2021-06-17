@@ -4,7 +4,6 @@ import cv2 as cv
 import numpy as np
 
 from skimage import measure
-import numpy as np
 import imutils
 from enum import Enum
 
@@ -65,8 +64,9 @@ class ImageSegmenter:
         self.__image = None
         self.__all_lines = []
         self.__oriented_lines = []
-        self.filtered_lines_by_center = []
+        self.__filtered_lines_by_center = []
         self.__segments = []
+        self.__segments_with_coordinates = []
 
     def __draw_lines(self, lines, name='lines', mask=None, print_strength=False):
         if self.__debug:
@@ -148,7 +148,7 @@ class ImageSegmenter:
         """
         self.__draw_lines(self.__oriented_lines, f'{self.__orientation.name.lower()} lines strengthened',
                           print_strength=True)
-        self.filtered_lines_by_center = []
+        self.__filtered_lines_by_center.clear()
         if not self.__oriented_lines:
             return
         neighbours_distance = self.__config.get('neighbours_distance', 0.1) * self.__image_length_other
@@ -159,36 +159,42 @@ class ImageSegmenter:
                 if line.strength > max_line.strength:
                     max_line = line
             else:
-                self.filtered_lines_by_center.append(max_line)
+                self.__filtered_lines_by_center.append(max_line)
                 max_line = line
             last_center = line.center
-        self.filtered_lines_by_center.append(max_line)
+        self.__filtered_lines_by_center.append(max_line)
 
-        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines',
+        self.__draw_lines(self.__filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines',
                           print_strength=True)
-        self.__draw_lines(self.filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines image',
+        self.__draw_lines(self.__filtered_lines_by_center, f'filtered {self.__orientation.name.lower()} lines image',
                           mask=self.__image)
 
     def __extract_segments(self):
         """
         prepare the cutoffs and segment the image
         """
-        if not self.filtered_lines_by_center:
+        if not self.__filtered_lines_by_center:
             return
         cuts = []
         current_cut = 0
-        for line in self.filtered_lines_by_center:
+        for line in self.__filtered_lines_by_center:
             cuts.append(current_cut)
             current_cut = int(line.center)
         cuts.append(current_cut)
         cuts.append(self.__image_length_other - 1)
 
+        self.__segments.clear()
+        self.__segments_with_coordinates.clear()
+
         for cut_index in range(1, len(cuts)):
+            lower_point = cuts[cut_index - 1]
+            upper_point = cuts[cut_index]
             if self.__orientation == Orientation.HORIZONTAL:
-                segment = self.__original_image[cuts[cut_index - 1]: cuts[cut_index], 0: self.__image_length - 1]
+                segment = self.__original_image[lower_point: upper_point, : ]
             else:
-                segment = self.__original_image[0: self.__image_length - 1, cuts[cut_index - 1]: cuts[cut_index]]
+                segment = self.__original_image[ : , lower_point: upper_point]
             self.__segments.append(segment)
+            self.__segments_with_coordinates.append((segment, lower_point, upper_point))
 
     def extract_segments(self):
         self.__fix_image()
@@ -203,6 +209,8 @@ class ImageSegmenter:
     def get_segments(self):
         return self.__segments
 
+    def get_segments_with_coordinates(self):
+        return self.__segments_with_coordinates
 
 def fix_glare(image):
     # resize the image
@@ -271,9 +279,9 @@ def get_shelves(image):
         'neighbours_distance': 0.1
     }
 
-    shelves_segmentor = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
-    shelves_segmentor.extract_segments()
-    shelves = shelves_segmentor.get_segments()
+    shelves_segmenter = ImageSegmenter(image, Orientation.HORIZONTAL, config, debug=False)
+    shelves_segmenter.extract_segments()
+    shelves = shelves_segmenter.get_segments()
 
     return shelves
 
@@ -286,9 +294,9 @@ def get_spines(shelf):
         'neighbours_distance': 0.1
     }
 
-    spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
-    spines_segmentor.extract_segments()
-    spines = spines_segmentor.get_segments()
+    spines_segmenter = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
+    spines_segmenter.extract_segments()
+    spines = spines_segmenter.get_segments()
     print(f'spines number: {len(spines)}')
     for j, spine in enumerate(spines):
         cv.imshow(f'{i}:{j}', spine)
@@ -314,7 +322,7 @@ if __name__ == '__main__':
         for j, shelf in enumerate(shelves):
             cv.imwrite(f'images/output/{i}_{j}.jpg', shelf)
             cv.imshow(f'{i}:{j}', shelf)
-        # cv.waitKey(0)
+        cv.waitKey(0)
 
     # path = 'images/maktaba/01.jpg'
     # image = cv.imread(path)
@@ -326,9 +334,9 @@ if __name__ == '__main__':
     # #     if shelf.shape[0] < 0.2 * image.shape[0]:
     # #         continue
     # #     cv.imwrite(f'images/output/shelf_{i}.png', shelf)
-    # #     spines_segmentor = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
-    # #     spines_segmentor.extract_segments()
-    # #     spines = spines_segmentor.get_segments()
+    # #     spines_segmenter = ImageSegmenter(shelf, Orientation.VERTICAL, config, debug=True)
+    # #     spines_segmenter.extract_segments()
+    # #     spines = spines_segmenter.get_segments()
     # #
     # #     for j, spine in enumerate(spines):
     # #         cv.imwrite(f'images/output/spine_{i}.{j}.png', spine)
