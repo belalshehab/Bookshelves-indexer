@@ -2,6 +2,7 @@ import numpy as np
 
 from image_segmenter import ImageSegmenter, Orientation
 from book import Book
+from info_extractor import InfoExtractor
 
 import cv2 as cv
 
@@ -9,16 +10,12 @@ import json
 
 
 class LibraryIndexer:
-    def __init__(self, image, config=None):
+    def __init__(self, library_image, config=None):
         self.__config = config
         if config is None:
             with open('config.json', 'r') as f:
                 self.__config = json.load(f)
-
-        self.__image = image
-        self.__shelves = []
-        self.__spines = []
-
+        self.__library_image = library_image
         self.__books = []
 
     def __extract_shelves(self, image):
@@ -35,7 +32,7 @@ class LibraryIndexer:
 
     def extract_books(self):
         self.__books.clear()
-        shelves = self.__extract_shelves(self.__image)
+        shelves = self.__extract_shelves(self.__library_image)
         for shelf_index, shelf in enumerate(shelves):
             shelf_lower_point = shelf[1]
             shelf_upper_point = shelf[2]
@@ -45,15 +42,20 @@ class LibraryIndexer:
                 spine_lower_point = spine[1]
                 spine_upper_point = spine[2]
                 spine = spine[0]
-                book = {
-                    'spine': spine,
-                    'shelf': shelf_index,
-                    'index': spine_index,
-                    'bounding_rectangle': ((spine_lower_point, shelf_lower_point),
+                book = Book()
+                book.spine = spine
+                book.shelf = shelf_index
+                book.index = spine_index
+                book.bounding_rectangle = ((spine_lower_point, shelf_lower_point),
                                            (spine_upper_point, shelf_upper_point))
-                }
                 self.__books.append(book)
         return self.__books
+
+    def extract_books_info(self):
+        for index, book in enumerate(self.__books):
+            infoExtractor = InfoExtractor(book.spine, book)
+            self.__books[index] = infoExtractor.extract_book_info()
+            return self.__books
 
     def get_books(self):
         return self.__books
@@ -65,16 +67,16 @@ if __name__ == '__main__':
     library_copy = np.copy(library)
     library_indexer = LibraryIndexer(library)
     books = library_indexer.extract_books()
+    books = library_indexer.extract_books_info()
 
     for book in books:
-        p0 = book.get("bounding_rectangle")[0]
-        p1 = book.get("bounding_rectangle")[1]
-        print(f'book: {book.get("shelf")}, {book.get("index")}, {book.get("bounding_rectangle")}')
-        cv.imshow(f'{book.get("shelf")}_{book.get("index")}', book.get('spine'))
+        p0 = book.bounding_rectangle[0]
+        p1 = book.bounding_rectangle[1]
+        print(book)
+        cv.imshow(f'{book.shelf}_{book.index}', book.spine)
         cv.rectangle(library_copy, p0, p1, (0, 255, 255), 3)
         center = (int((p0[0] + p1[0]) / 2), int((p0[1] + p1[1]) / 2))
         print(center)
-        cv.putText(library_copy, f'{book.get("shelf")}_{book.get("index")}',
-                   center, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+        cv.putText(library_copy, f'{book.shelf}_{book.index}', center, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
     cv.imshow(f'library', library_copy)
     cv.waitKey(0)

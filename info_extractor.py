@@ -3,7 +3,7 @@ from googlesearch import search
 from book import Book
 import pytesseract
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
 def bookname_search(text):
@@ -30,7 +30,7 @@ class InfoExtractor:
         """
         ocr operation
         """
-        # self.__image = cv.rotate(self.__image, cv.ROTATE_90_COUNTERCLOCKWISE)
+        self.__image = cv.rotate(self.__image, cv.ROTATE_90_COUNTERCLOCKWISE)
         gray = cv.cvtColor(self.__image, cv.COLOR_BGR2GRAY)
         config = "--psm 3"
         self.__book_info.ocr_output = pytesseract.image_to_string(gray, config=config)
@@ -44,13 +44,14 @@ class InfoExtractor:
     def extract_book_info(self):
         self.__ocr()
         self.__goodreads_search()
+        return self.__book_info
 
     def get_book_info(self):
         return self.__book_info
 
 
 if __name__ == '__main__':
-    path = 'D:/college/2nd semester/image processing/Prroject/Book-spine-extractor/SpineClassifier/images/spines/10.jpg'
+    path = "images/output/spines/1.jpg"
     img = cv.imread(path)
     # img = cv.rotate(img, cv.ROTATE_90_COUNTERCLOCKWISE)
     cv.imshow("original", img)
