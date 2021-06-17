@@ -1,0 +1,15 @@
+{
+  "shelves_segmenter": {
+        "minimum_length": 0.03,
+        "minimum_strength": 0.85,
+        "boundaries_offset": 0.1,
+        "neighbours_distance": 0.1
+    },
+
+  "spines_segmenter": {
+        "minimum_length": 0.03,
+        "minimum_strength": 0.85,
+        "boundaries_offset": 0.001,
+        "neighbours_distance": 0.1
+    }
+}
