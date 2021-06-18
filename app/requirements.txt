@@ -1,6 +1,0 @@
-flask
-Flask-PyMongo
-pymongo[srv]
-python-dotenv
-opencv-python>=3.3.0.10
-

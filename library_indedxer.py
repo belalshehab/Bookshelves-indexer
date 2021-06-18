@@ -64,7 +64,7 @@ class LibraryIndexer:
 
 
 def indexer_wrapper(path):
-    with open('../config.json', 'r') as f:
+    with open('./config.json', 'r') as f:
         config = json.load(f)
     library = cv.imread(path)
     library_indexer = LibraryIndexer(library, config)
@@ -78,8 +78,8 @@ def spot_the_book(book):
     p0 = book['bounding_rectangle'][0]
     p1 = book['bounding_rectangle'][1]
     cv.rectangle(image, p0, p1, (255, 0, 255), 3)
-    cv.imwrite('uploads/tmp.png', image)
-    book['library_url'] = 'uploads/tmp.png'
+    cv.imwrite('./static/tmp.png', image)
+    book['library_url'] = './static/tmp.png'
     return book
 
 
