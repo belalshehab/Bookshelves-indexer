@@ -9,7 +9,7 @@ import pytesseract
 
 def bookname_search(text):
     goodreads_url_prefix = "https://www.goodreads.com/book/show/"
-    gen = search(text + " " + goodreads_url_prefix, tld='com', lang='en', num=1, pause=5)
+    gen = search(text + " " + goodreads_url_prefix, tld='com', lang='en', num=1, pause=6)
     bookName_search_url = next(gen)
     bookName = bookName_search_url[bookName_search_url.rfind(".") + 1:]
     book_name = bookName.replace("_", " ")

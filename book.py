@@ -4,18 +4,20 @@ class Book:
         self.ocr_output = ''
         self.name = ''
         self.book_url = ''
-        self.library = ''
+        self.library_name = ''
+        self.library_url = ''
         self.shelf = ''
         self.index = ''
         self.bounding_rectangle = ((0, 0), (0, 0))
 
     def __dict__(self):
         return {
-            'spine': self.spine.shape,
+            'spine': [],
             'ocr_output': self.ocr_output,
             'name': self.name,
             'book_url': self.book_url,
-            'library': self.library,
+            'library_name': self.library_name,
+            'library_url': self.library_url,
             'shelf': self.shelf,
             'index': self.index,
             'bounding_rectangle': self.bounding_rectangle
