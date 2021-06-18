@@ -8,7 +8,7 @@ from flask import (Flask,
                    request,
                    send_from_directory,
                    url_for)
-
+import re
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 from library_indedxer import indexer_wrapper, spot_the_book
@@ -17,7 +17,7 @@ load_dotenv()
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MONGO_DBNAME'] = 'booksdb'
 app.config['MONGO_URI'] = os.getenv('CONNECTION_URL')
@@ -56,9 +56,17 @@ def search_book():
     if request.method == 'POST':
         if request.form['searchName']:
             bookName = request.form['searchName']
+            bookName = bookName.replace(' ','.*')
+            
+            bookName = '.*'+bookName+'.*'
+            bookRgx = re.compile(bookName,re.IGNORECASE)
             print(f'name: {bookName}')
             book = mongo.db.books
-            b_by_book = book.find_one({'name': bookName})
+            b_by_book = book.find_one({'name': bookRgx})
+            if b_by_book is None :
+                print('in not')
+                return jsonify({'name':'No book with the given name exists'})
+
             b_by_book['_id'] = ''
 
             b_by_book = spot_the_book(b_by_book)
