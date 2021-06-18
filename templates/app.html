@@ -89,17 +89,15 @@
             cache: false,
             processData: false,
             success: function(data) {
-                console.log(data);
-                console.log('Success!');
                 $("#uploadSuccess").show();
-              $("#uploadSuccess").html('Upload success your library id is: ' +data);
+              $("#uploadSuccess").html('Upload your library is Success!');
 
             },
         });
     });
 });
 
-    $(function() {
+  $(function() {
     $('#search-button').click(function() {
         var form_data = new FormData($('#search-book-form')[0]);
         $.ajax({
@@ -110,16 +108,36 @@
             cache: false,
             processData: false,
             success: function(data) {
-                console.log(data);
-                console.log('Success!');
                 $("#result").show()
-                $("#search-result").show();
-              $("#search_result").html('your book name is: ' +data.name + ', your book exists in: ' + data.library);
-
+                $("#position_result").show();
+              $("#position_result").html(
+                'Shelf ' + data.shelf + ",and the book Number is " + data.index 
+                 );
             },
         });
     });
 });
+
+
+$(function() {
+  $('#search-button').click(function() {
+      var form_data = new FormData($('#search-book-form')[0]);
+      $.ajax({
+          type: 'POST',
+          url: '/search',
+          data: form_data,
+          contentType: false,
+          cache: false,
+          processData: false,
+          success: function(data) {
+              $("#result").show()
+              $("#search-result").show();
+            $("#search_result").html( data.name + ' book in:');
+          },
+      });
+  });
+});
+
 </script>
 
   <nav class="navbar navbar-light fixed-top py-2">
@@ -156,11 +174,6 @@
                     placeholder="Enter Library Name">
               </div>
 
-            <!-- when upload image , it appear here -->
-            <!-- <div class="col-lg-4 mt-2">
-              <img src="../images/01.png" height="200" width="170" class="img-thumbnail d-none d-lg-block">
-            </div> -->
-
           </div>
 
           <div class="row text-center">
@@ -186,10 +199,6 @@
           <input type="text" name="searchName" class="form-control form-control-lg mb-resp"
             placeholder="Enter book name">
         </div>
-        <!-- <div class="col-md-4">
-          <input type="text" name="searchAuthor" class="form-control form-control-lg mb-resp"
-            placeholder="Enter author name">
-        </div> -->
 
         <div class="col-md-6">
 
@@ -207,16 +216,28 @@
 
   <section>
     <div id="result" class="container">
+    <!-- <div  class="container"> -->
       <div class="row">
         <div class="col-md-12 mt-4 m-4">
           <ul class="list-group">
 
 
             <li class="list-group-item h4 text-center">
-              Your book in :
+            <p id="search_result">  Your book in :</p>
 
               <!-- the output of app -->
-              <p id="search_result" class="mt-2"> shelf 1 , book Number 6 from your right. </p> 
+              
+              <div class="row mb-4">
+
+                <div class="col-lg-8 text-center mt-4">
+                  <p id="position_result" class="mt-2"></p> 
+                </div>
+    
+                    <div class="col-lg-4 mt-4">
+                      <img src="{{url_for('static', filename='tmp.png')}}"  height="350" width="300" class = "img-thumbnail">
+                  </div>
+
+              </div>
               
             </li>
 

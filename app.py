@@ -11,10 +11,7 @@ from flask import (Flask,
 
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
-
-
 from library_indedxer import indexer_wrapper, spot_the_book
-
 
 load_dotenv()
 UPLOAD_FOLDER = 'uploads'
@@ -34,7 +31,6 @@ def Home():
 
     return render_template('app.html')
 
-
 @app.route('/uploader', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
@@ -53,23 +49,6 @@ def upload_file():
         mongo.db.books.insert_many(books_list)
         return jsonify(str('success'))
 
-        # function code to get list of dictionaries function(filePath)
-        # book = mongo.db.books
-        # bookIds = []
-        # for book in bookList:
-        # bookName = book['name']
-        # author = book['author']
-        # ..........
-        # book_id = book.insert({'name': name, 'lname':libraryName ,'author':author})
-        # bookIds.append(book_id)
-
-        # booksList = []
-        # book = mongo.db.books
-        # name = f.filename
-        # libraryName = request.form['libraryname']
-        # author = 'john'
-        # book_id = book.insert({'name': name, 'lname': libraryName, 'author': author})
-        # return jsonify(str(book_id))
 
 
 @app.route('/search', methods=['GET', 'POST'])
