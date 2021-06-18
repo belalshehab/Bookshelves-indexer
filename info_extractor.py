@@ -31,13 +31,23 @@ class InfoExtractor:
         ocr operation
         """
         gray = cv.cvtColor(self.__image, cv.COLOR_BGR2GRAY)
-        rotated = cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE)
+        gray = cv.GaussianBlur(gray, (3, 3), 1)
+        edges = cv.Canny(gray, 50, 150, apertureSize=3)
+
         config = "--psm 3"
-        self.__book_info.ocr_output = pytesseract.image_to_string(rotated, config=config)
-        rotated = cv.rotate(gray, cv.ROTATE_90_CLOCKWISE)
-        ocr = pytesseract.image_to_string(rotated, config=config)
-        if len(ocr) > len(self.__book_info.ocr_output):
-            self.__book_info.ocr_output = ocr
+        self.__book_info.ocr_output = pytesseract.image_to_string(edges, config=config).strip()
+        print(f'ocr output:\n{self.__book_info.ocr_output}\ndone')
+        cv.imshow(f'edges', edges)
+        cv.waitKey(0)
+        for i in range(3):
+            rotated = cv.rotate(edges, i)
+            cv.imshow(f'rotated: {i}', rotated)
+            cv.waitKey(0)
+            ocr = pytesseract.image_to_string(rotated, config=config).strip()
+            print(f'ocr output:\n{ocr}\ndone')
+            if len(ocr) > len(self.__book_info.ocr_output):
+                self.__book_info.ocr_output = ocr
+        # rotated = cv.rotate(edges, cv.ROTATE_90_CLOCKWISE)
 
     def __goodreads_search(self):
         """

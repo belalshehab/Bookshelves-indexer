@@ -69,7 +69,7 @@ def indexer_wrapper(path):
     library = cv.imread(path)
     library_indexer = LibraryIndexer(library, config)
     books = library_indexer.extract_books()
-    books = library_indexer.extract_books_info()
+    # books = library_indexer.extract_books_info()
     return books
 
 
