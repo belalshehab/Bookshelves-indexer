@@ -11,7 +11,9 @@
  <script>
     $(document).ready(function() {
     $('#uploadSuccess').hide();
-    $("#result").hide()
+    $("#result").hide();
+        $("#position_result").hide();
+        $("#result_photo").hide();
 });
 </script>
 
@@ -89,8 +91,15 @@
             cache: false,
             processData: false,
             success: function(data) {
+                $("#uploadSuccess").hide()
                 $("#uploadSuccess").show();
-              $("#uploadSuccess").html('Upload your library is Success!');
+                if (data) {
+                    $("#uploadSuccess").html('Uploading your library is Success!');
+                }
+                if (!data) {
+                    $("#uploadSuccess").html('Upload failed!');
+
+                }
 
             },
         });
@@ -108,11 +117,17 @@
             cache: false,
             processData: false,
             success: function(data) {
-                $("#result").show()
+                $("#position_result").hide();
+                $("#result_photo").hide();
+                if (data.name !== 'No book with the given name exists'){
+                $("#result").show();
                 $("#position_result").show();
               $("#position_result").html(
-                'Shelf ' + data.shelf + ",and the book Number is " + data.index 
-                 );
+                'Shelf ' + data.shelf + ",and the book Number is " + data.index);
+                 var url = data.library_url.substring(1);
+                $("#result_photo").show();
+                $("#result_photo").attr('src',url);
+                }
             },
         });
     });
@@ -130,9 +145,18 @@ $(function() {
           cache: false,
           processData: false,
           success: function(data) {
-              $("#result").show()
+               $("#result").hide()
+                    $("#search-result").hide();
+              if (data.name === 'No book with the given name exists'){
+                   $("#result").show();
               $("#search-result").show();
-            $("#search_result").html( data.name + ' book in:');
+                    $("#search_result").html( data.name  );
+              }
+              if (data.name != 'No book with the given name exists') {
+                    $("#result").show()
+                    $("#search-result").show();
+                  $("#search_result").html( data.name + ' book in:');
+              }
           },
       });
   });
@@ -165,7 +189,7 @@ $(function() {
 
             <div class="col-lg-6 text-center mt-4">
               <a href="#" class="btn btn-outline-dark btn-lg text-white">
-                <input type="file" name="file_input" oninput="input_filename();" required>
+                <input type="file" name="file_input" oninput="input_filename();" accept="image/*" required>
               </a>
             </div>
 
@@ -234,7 +258,8 @@ $(function() {
                 </div>
     
                     <div class="col-lg-4 mt-4">
-                      <img src="{{url_for('static', filename='tmp.png')}}"  height="350" width="300" class = "img-thumbnail">
+
+                      <img id = "result_photo"   height="350" width="300" class = "img-thumbnail">
                   </div>
 
               </div>
