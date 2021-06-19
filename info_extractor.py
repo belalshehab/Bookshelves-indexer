@@ -9,10 +9,13 @@ import pytesseract
 
 def bookname_search(text):
     goodreads_url_prefix = "https://www.goodreads.com/book/show/"
-    gen = search(text + " " + goodreads_url_prefix, tld='com', lang='en', num=1, pause=6)
+    gen = search(text + " " + goodreads_url_prefix, tld='com', lang='en', num=1, pause=4)
     bookName_search_url = next(gen)
-    bookName = bookName_search_url[bookName_search_url.rfind(".") + 1:]
-    book_name = bookName.replace("_", " ")
+    bookName = bookName_search_url[bookName_search_url.find("-") + 1:]
+    book_name = bookName.replace("-", " ")
+
+    # bookName = bookName_search_url[bookName_search_url.rfind(".") + 1:]
+    # book_name = bookName.replace("_", " ")
 
     return bookName_search_url, book_name
 
@@ -30,24 +33,24 @@ class InfoExtractor:
         """
         ocr operation
         """
-        gray = cv.cvtColor(self.__image, cv.COLOR_BGR2GRAY)
-        gray = cv.GaussianBlur(gray, (3, 3), 1)
-        edges = cv.Canny(gray, 50, 150, apertureSize=3)
+        gaussian = cv.GaussianBlur(self.__image, (3, 3), 1)
+        gray = cv.cvtColor(gaussian, cv.COLOR_BGR2GRAY)
+        edges = cv.Canny(gray, 50, 150, apertureSize=3)t
 
+        rotated = cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE)
+        cv.imshow(f'gray', rotated)
         config = "--psm 3"
-        self.__book_info.ocr_output = pytesseract.image_to_string(edges, config=config).strip()
+        self.__book_info.ocr_output = pytesseract.image_to_string(rotated, config=config).strip()
         print(f'ocr output:\n{self.__book_info.ocr_output}\ndone')
-        cv.imshow(f'edges', edges)
         cv.waitKey(0)
-        for i in range(3):
-            rotated = cv.rotate(edges, i)
-            cv.imshow(f'rotated: {i}', rotated)
-            cv.waitKey(0)
-            ocr = pytesseract.image_to_string(rotated, config=config).strip()
-            print(f'ocr output:\n{ocr}\ndone')
-            if len(ocr) > len(self.__book_info.ocr_output):
-                self.__book_info.ocr_output = ocr
-        # rotated = cv.rotate(edges, cv.ROTATE_90_CLOCKWISE)
+        # for i in range(3):
+        #     rotated = cv.rotate(gray, i)
+        #     cv.imshow(f'rotated: {i}', rotated)
+        #     cv.waitKey(0)
+        #     ocr = pytesseract.image_to_string(rotated, config=config).strip()
+        #     print(f'ocr output:\n{ocr}\ndone')
+        #     if len(ocr) > len(self.__book_info.ocr_output):
+        #         self.__book_info.ocr_output = ocr
 
     def __goodreads_search(self):
         """
@@ -59,7 +62,7 @@ class InfoExtractor:
 
     def extract_book_info(self):
         self.__ocr()
-        self.__goodreads_search()
+        # self.__goodreads_search()
         return self.__book_info
 
     def get_book_info(self):
@@ -67,21 +70,46 @@ class InfoExtractor:
 
 
 if __name__ == '__main__':
-    path = "images/output/spines/1.jpg"
-    img = cv.imread(path)
+    # path = "images/output/2_9.png"
+    # img = cv.imread(path)
+    # # img = cv.resize(img, (322, 478))
+    # # length = img.shape[0] if img.shape[0] > img.shape[1] else img.shape[1]
+    # # scale = 500 / length
+    # # print(f'scale: {scale}')
+    # # if scale < 1:
+    # #     img = cv.resize(img, (0, 0), fx=scale, fy=scale)
     # img = cv.rotate(img, cv.ROTATE_90_COUNTERCLOCKWISE)
-    cv.imshow("original", img)
+    # cv.imshow("original", img)
+    # gaussian = cv.GaussianBlur(img, (3, 3), 1)
+    # gaussian2 = cv.GaussianBlur(img, (3, 3), 2)
+    # cv.imshow('gu', gaussian)
+    #
+    # gray = cv.cvtColor(gaussian, cv.COLOR_BGR2GRAY)
+    # gray2 = cv.cvtColor(gaussian2, cv.COLOR_BGR2GRAY)
+    # cv.imshow('gb', gray)
+    #
+    # edges = cv.Canny(gray2, 50, 150, apertureSize=3)
+    # cv.imshow('edges', edges)
+
     # gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     # # adaptive_threshold = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 85, 11)
     # # adaptive_threshold = cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
     # # cv.imshow("adaptive_threshold", adaptive_threshold)
     # config = "--psm 3"
     # text = pytesseract.image_to_string(gray, config=config)
-    # print(text)
+    # text2 = pytesseract.image_to_string(edges, config=config)
+    #
+    # print(text, "\n ------------------ \n", text2)
 
-    info_extractor = InfoExtractor(img)
-    info_extractor.extract_book_info()
-    info = info_extractor.get_book_info()
+    path = "images/output/0_{}.png"
 
-    print(info.name, "\n", info.ocr_output, "\n", info.book_url)
-    cv.waitKey(0)
+    for i in range(15):
+
+        img = cv.imread(path.format(i))
+        info_extractor = InfoExtractor(img)
+        info_extractor.extract_book_info()
+        info = info_extractor.get_book_info()
+        print(f'book: {info}')
+        cv.waitKey(0)
+
+    # print(info.name, "\n", info.ocr_output, "\n", info)
