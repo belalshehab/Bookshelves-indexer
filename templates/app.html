@@ -122,8 +122,10 @@
                 if (data.name !== 'No book with the given name exists'){
                 $("#result").show();
                 $("#position_result").show();
-              $("#position_result").html(
-                data.book_url);
+                $("#title_result").show();
+                $("#title_result").html( "Goodread link is " );
+                $("#position_result").html( " " + data.book_url );
+                $("#position_result").attr('href',data.book_url);
                  var url = data.library_url.substring(1);
                 $("#result_photo").show();
                 $("#result_photo").attr('src',url);
@@ -150,12 +152,12 @@ $(function() {
               if (data.name === 'No book with the given name exists'){
                    $("#result").show();
               $("#search-result").show();
-                    $("#search_result").html( data.name  );
+                    $("#search_result").html( data.name);
               }
               if (data.name != 'No book with the given name exists') {
                     $("#result").show()
                     $("#search-result").show();
-                  $("#search_result").html( data.name + ' book GoodReads URL is:');
+                  $("#search_result").html( data.name + ' book in:');
               }
           },
       });
@@ -240,26 +242,26 @@ $(function() {
 
   <section>
     <div id="result" class="container">
-    <!-- <div  class="container"> -->
       <div class="row">
         <div class="col-md-12 mt-4 m-4">
           <ul class="list-group">
 
 
             <li class="list-group-item h4 text-center">
-            <p id="search_result">  Your book in :</p>
+            <p id="search_result">  Your book is :</p>
 
               <!-- the output of app -->
               
               <div class="row mb-4">
 
                 <div class="col-lg-8 text-center mt-4">
-                  <p id="position_result" class="mt-2"></p>
+                  <h5 id="title_result"></h5>
+                  <a id="position_result" class="mt-2"></a> 
                 </div>
     
                     <div class="col-lg-4 mt-4">
 
-                      <img id = "result_photo"   height="350" width="300" class = "img-thumbnail">
+                      <img id = "result_photo" height="350" width="300" class = "img-thumbnail">
                   </div>
 
               </div>
