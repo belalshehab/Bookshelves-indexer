@@ -8,5 +8,5 @@
 
 2. Run the app with this python app.py
 
-3. Go to this http://0.0.0.0:5000/
+3. Go to this http://127.0.0.1:5000/
 
