@@ -77,9 +77,11 @@ def spot_the_book(book):
     image = cv.imread(book['library_url'])
     p0 = book['bounding_rectangle'][0]
     p1 = book['bounding_rectangle'][1]
+    s=str(book['shelf'])
+    i = str(book['index'])
     cv.rectangle(image, p0, p1, (255, 0, 255), 3)
-    cv.imwrite('./static/tmp.png', image)
-    book['library_url'] = './static/tmp.png'
+    cv.imwrite('./static/tmp'+s+i+'.png', image)
+    book['library_url'] = './static/tmp'+s+i+'.png'
     return book
 
 

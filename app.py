@@ -1,13 +1,8 @@
 import os
 from flask import (Flask,
-                   flash,
                    jsonify,
-                   make_response,
-                   redirect,
                    render_template,
-                   request,
-                   send_from_directory,
-                   url_for)
+                   request)
 import re
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
@@ -28,7 +23,6 @@ mongo = PyMongo(app)
 def Home():
     if not os.path.isdir(UPLOAD_FOLDER):
         os.mkdir(UPLOAD_FOLDER)
-
     return render_template('app.html')
 
 @app.route('/uploader', methods=['GET', 'POST'])
@@ -38,7 +32,6 @@ def upload_file():
         f.save(os.path.join(app.config["UPLOAD_FOLDER"], f.filename))
         filePath = 'uploads/' + f.filename
         books = indexer_wrapper(filePath)
-
         books_list = []
 
         for book in books:
@@ -60,30 +53,14 @@ def search_book():
             
             bookName = '.*'+bookName+'.*'
             bookRgx = re.compile(bookName,re.IGNORECASE)
-            print(f'name: {bookName}')
             book = mongo.db.books
             b_by_book = book.find_one({'name': bookRgx})
             if b_by_book is None :
-                print('in not')
                 return jsonify({'name':'No book with the given name exists'})
 
             b_by_book['_id'] = ''
-
             b_by_book = spot_the_book(b_by_book)
-
-            print(f'b_by_book: {b_by_book}')
-
             return jsonify(b_by_book)
-        elif request.form['searchAuthor']:
-            authorName = request.form['searchAuthor']
-            book = mongo.db.books
-            b_by_author = book.find({'author': authorName})
-            booklist = []
-            for b in b_by_author:
-                bookObject = {'name': b['name'], 'library': b['lname']}
-                booklist.append(bookObject)
-
-            return jsonify(booklist)
 
         else:
             return 'error'
