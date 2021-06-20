@@ -35,7 +35,7 @@ class InfoExtractor:
         """
         gaussian = cv.GaussianBlur(self.__image, (3, 3), 1)
         gray = cv.cvtColor(gaussian, cv.COLOR_BGR2GRAY)
-        edges = cv.Canny(gray, 50, 150, apertureSize=3)t
+        edges = cv.Canny(gray, 50, 150, apertureSize=3)
 
         rotated = cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE)
         cv.imshow(f'gray', rotated)
