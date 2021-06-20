@@ -1,4 +1,7 @@
 import cv2 as cv
+import numpy
+import numpy as np
+
 from googlesearch import search
 from book import Book
 import pytesseract
@@ -11,12 +14,17 @@ def bookname_search(text):
     goodreads_url_prefix = "https://www.goodreads.com/book/show/"
     gen = search(text + " " + goodreads_url_prefix, tld='com', lang='en', num=1, pause=4)
     bookName_search_url = next(gen)
-    bookName = bookName_search_url[bookName_search_url.find("-") + 1:]
-    book_name = bookName.replace("-", " ")
 
-    # bookName = bookName_search_url[bookName_search_url.rfind(".") + 1:]
-    # book_name = bookName.replace("_", " ")
+    index = bookName_search_url.find("show/") + len('show/')
 
+    book_name = bookName_search_url[index:]
+
+    book_name = book_name.replace("-", " ").replace("_", " ").replace(".", " ")
+
+    index = book_name.find(" ") + 1
+
+    book_name = book_name[index:]
+    print(f'book name: {book_name}, url: {bookName_search_url}')
     return bookName_search_url, book_name
 
 
@@ -35,14 +43,18 @@ class InfoExtractor:
         """
         gaussian = cv.GaussianBlur(self.__image, (3, 3), 1)
         gray = cv.cvtColor(gaussian, cv.COLOR_BGR2GRAY)
-        edges = cv.Canny(gray, 50, 150, apertureSize=3)t
+        edges = cv.Canny(gray, 50, 150, apertureSize=3)
+        #
+        # contours = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        # contours = contours[0] if len(contours) == 2 else contours[1]
+        # big_contour = max(contours, key=cv.contourArea)
 
         rotated = cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE)
-        cv.imshow(f'gray', rotated)
+        # cv.imshow(f'image', cv.rotate(self.__image, cv.ROTATE_90_COUNTERCLOCKWISE))
         config = "--psm 3"
         self.__book_info.ocr_output = pytesseract.image_to_string(rotated, config=config).strip()
-        print(f'ocr output:\n{self.__book_info.ocr_output}\ndone')
-        cv.waitKey(0)
+        # print(f'ocr output:\n{self.__book_info.ocr_output}\ndone')
+        # cv.waitKey(0)
         # for i in range(3):
         #     rotated = cv.rotate(gray, i)
         #     cv.imshow(f'rotated: {i}', rotated)
@@ -62,7 +74,7 @@ class InfoExtractor:
 
     def extract_book_info(self):
         self.__ocr()
-        # self.__goodreads_search()
+        self.__goodreads_search()
         return self.__book_info
 
     def get_book_info(self):
@@ -101,15 +113,42 @@ if __name__ == '__main__':
     #
     # print(text, "\n ------------------ \n", text2)
 
-    path = "images/output/0_{}.png"
+    # path = "images/output/0_{}.png"
+    #
+    # for i in range(15):
+    #
+    #     img = cv.imread(path.format(i))
+    #     info_extractor = InfoExtractor(img)
+    #     info_extractor.extract_book_info()
+    #     info = info_extractor.get_book_info()
+    #     print(f'book: {info}')
+    #     cv.waitKey(0)
 
-    for i in range(15):
+    path = "images/output/spines/8.jpg"
+    img = cv.imread(path)
+    gaussian = cv.GaussianBlur(img, (3, 3), 1)
+    gray = cv.cvtColor(gaussian, cv.COLOR_BGR2GRAY)
+    edges = cv.Canny(gray, 50, 150, apertureSize=3)
 
-        img = cv.imread(path.format(i))
-        info_extractor = InfoExtractor(img)
-        info_extractor.extract_book_info()
-        info = info_extractor.get_book_info()
-        print(f'book: {info}')
-        cv.waitKey(0)
+    contours = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours = contours[0] if len(contours) == 2 else contours[1]
+    print(contours)
+    # big_contour = max(contours, key=cv.contourArea)
+    # print(big_contour)
+    # result = np.zeros_like(img)
+    #
+    # cv.drawContours(result, [big_contour], 0, (255, 255, 255), cv.FILLED)
+
+    print(len(contours))
+
+    result = np.zeros_like(img)
+    cv.drawContours(result, contours, 0, (255, 255, 255), cv.FILLED)
+
+    # save results
+    # cv.imwrite('knife_edge_result.jpg', result)
+
+    cv.imshow('result', result)
+    cv.imshow('edges', edges)
+    cv.waitKey(0)
 
     # print(info.name, "\n", info.ocr_output, "\n", info)

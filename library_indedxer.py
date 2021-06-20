@@ -69,7 +69,7 @@ def indexer_wrapper(path):
     library = cv.imread(path)
     library_indexer = LibraryIndexer(library, config)
     books = library_indexer.extract_books()
-    # books = library_indexer.extract_books_info()
+    books = library_indexer.extract_books_info()
     return books
 
 
@@ -78,32 +78,38 @@ def spot_the_book(book):
     p0 = book['bounding_rectangle'][0]
     p1 = book['bounding_rectangle'][1]
     cv.rectangle(image, p0, p1, (255, 0, 255), 3)
-    cv.imwrite('./static/tmp.png', image)
+    cv.imwrite('static/tmp.png', image)
     book['library_url'] = './static/tmp.png'
     return book
 
 
 if __name__ == '__main__':
-    path = 'images/maktaba/18.jpg'
-    library = cv.imread(path)
-    # library = cv.rotate(library, cv.ROTATE_90_CLOCKWISE)
-    # cv.imwrite('images/output/new_pic.png', img)
-    library_copy = np.copy(library)
+    path = 'images/maktaba/20.jpg'
 
-    library_indexer = LibraryIndexer(library)
-    books = library_indexer.extract_books()
-    # books = library_indexer.extract_books_info()
+    books = indexer_wrapper(path)
 
     for book in books:
-        p0 = book.bounding_rectangle[0]
-        p1 = book.bounding_rectangle[1]
         print(book)
-        # cv.imshow(f'{book.shelf}_{book.index}', book.spine)
-        cv.imwrite(f'images/output/{book.shelf}_{book.index}.png', book.spine)
-        cv.rectangle(library_copy, p0, p1, (0, 255, 255), 3)
-        center = (int((p0[0] + p1[0]) / 2), int((p0[1] + p1[1]) / 2))
-        print(center)
-        cv.putText(library_copy, f'{book.shelf}_{book.index}', center, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-    cv.imshow(f'library', library_copy)
-    cv.imwrite('images/output/new_pic.png', library_copy)
-    cv.waitKey(0)
+    #
+    # library = cv.imread(path)
+    # # library = cv.rotate(library, cv.ROTATE_90_CLOCKWISE)
+    # # cv.imwrite('images/output/new_pic.png', img)
+    # library_copy = np.copy(library)
+    #
+    # library_indexer = LibraryIndexer(library)
+    # books = library_indexer.extract_books()
+    # # books = library_indexer.extract_books_info()
+    #
+    # for book in books:
+    #     p0 = book.bounding_rectangle[0]
+    #     p1 = book.bounding_rectangle[1]
+    #     print(book)
+    #     # cv.imshow(f'{book.shelf}_{book.index}', book.spine)
+    #     cv.imwrite(f'images/output/{book.shelf}_{book.index}.png', book.spine)
+    #     cv.rectangle(library_copy, p0, p1, (0, 255, 255), 3)
+    #     center = (int((p0[0] + p1[0]) / 2), int((p0[1] + p1[1]) / 2))
+    #     print(center)
+    #     cv.putText(library_copy, f'{book.shelf}_{book.index}', center, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+    # cv.imshow(f'library', library_copy)
+    # cv.imwrite('images/output/new_pic.png', library_copy)
+    # cv.waitKey(0)
